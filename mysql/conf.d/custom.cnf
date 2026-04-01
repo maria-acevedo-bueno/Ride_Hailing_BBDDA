@@ -1,0 +1,13 @@
+[mysqld]
+# Validación estricta de datos
+sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+# Logs y rendimiento
+log_error_verbosity=3
+slow_query_log=1
+long_query_time=0.5
+log_queries_not_using_indexes=1
+
+# Ajustes básicos para InnoDB
+innodb_buffer_pool_size=256M
+max_connections=200
