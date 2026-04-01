@@ -1,0 +1,26 @@
+[mysqld]
+
+# STRICT_TRANS_TABLES: hace que MySQL rechace datos inválidos.
+# ERROR_FOR_DIVISION_BY_ZERO: convierte divisiones por cero en error.
+# NO_ENGINE_SUBSTITUTION: evita que MySQL cambie de motor de almacenamiento por otro en caso de que el que pediste no esté disponible.
+sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+# Error log detallado
+log_error_verbosity=3
+# En caso de que una query supere 0.5 segundos, se almacena en el log de querys lentas.
+slow_query_log=1
+long_query_time=0.5
+
+# Tamaño del buffer pool de innodb, de momento 256M, en caso de que no sea suficiente lo cambiaremos.
+innodb_buffer_pool_size=256M
+# 200 conexiones concurrentes máximo, para una tarea universitaria es suficiente, para Cabify, es poquísimo.
+max_connections=200
+
+# MySQL fuerza el flush del log en cada COMMIT, si el servidor se cae, es menos probable perder transacciones confirmadas.
+innodb_flush_log_at_trx_commit=1
+# Activamos el binary log para registrar los cambios de datos.
+log_bin=mysql-bin
+# El bin log se sincroniza con cada commit.
+sync_binlog=1
+# Los bin logs se conservarán durante 7 días (604800 segundos)
+binlog_expire_logs_seconds=604800

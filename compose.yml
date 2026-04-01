@@ -1,0 +1,29 @@
+name: cabify
+
+services:
+  mysql: 
+    image: mysql:8.0 
+    container_name: cabify_mysql8
+    restart: unless-stopped # Si el contenedor se cae, Docker intentará reiniciarlo automáticamente
+
+    ports:
+      - "3306:3306" # host:contenedor
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      - cabify_volume:/var/lib/mysql # persistencia
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro # .cnf
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cabify_volume:
