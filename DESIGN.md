@@ -133,6 +133,7 @@ erDiagram
     USUARIO ||--o{ VALORACION : "emite"
     USUARIO ||--o{ VALORACION : "recibe"
 ```
+
 ---
 # Dominios de atributos
 
@@ -201,6 +202,7 @@ Ambos comparten el mismo dominio que VIAJE.estado:
 - rider
 - conductor
 
+---
 # Notas de diseño
 La entidad USUARIO actúa como superentidad, especializándose en RIDER y CONDUCTOR. Esta decisión permite evitar redundancia en atributos comunes y centralizar la identidad del sistema.
 
