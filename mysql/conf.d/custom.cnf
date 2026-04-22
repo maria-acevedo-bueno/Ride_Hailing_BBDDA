@@ -1,13 +1,14 @@
 [mysqld]
-# Validación estricta de datos
+# Forzamos validaciones estrictas para que MySQL no inserte datos raros o truncados por accidente
 sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
 
-# Logs y rendimiento
+# Configuramos los logs para poder cazar consultas lentas y problemas de rendimiento
 log_error_verbosity=3
 slow_query_log=1
 long_query_time=0.5
 log_queries_not_using_indexes=1
 
-# Ajustes básicos para InnoDB
+# Ajustes de rendimiento: le damos un poco más de RAM a la caché de InnoDB
+# y limitamos las conexiones concurrentes para que el servidor no se sature.
 innodb_buffer_pool_size=256M
 max_connections=200

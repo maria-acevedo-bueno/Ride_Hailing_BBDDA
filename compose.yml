@@ -1,0 +1,78 @@
+services:
+  # Base de Datos Principal (MySQL 8)
+  mysql:
+    image: mysql:8.0
+    container_name: mysql8_ride_hailing
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      # Credenciales iniciales para levantar la BD vacía. 
+      # Usuarios más restrictivos se crean con scripts SQL.
+      MYSQL_ROOT_PASSWORD: "rootpass"
+      MYSQL_DATABASE: "ride_hailing"
+      MYSQL_USER: "app_user"
+      MYSQL_PASSWORD: "app_password"
+    volumes:
+      # Guardamos los datos en un volumen para no perderlos si borramos el contenedor
+      - mysql_data:/var/lib/mysql
+      # Montamos nuestra configuración personalizada en solo lectura
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+    healthcheck:
+      # Comprobamos que MySQL está realmente listo antes de arrancar los demás servicios
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Exportador de Métricas
+  mysqld-exporter:
+    image: prom/mysqld-exporter
+    container_name: mysqld_exporter
+    restart: unless-stopped
+    environment:
+      # Conexión para que el exporter extraiga las métricas.
+      DATA_SOURCE_NAME: "exporter:exporterpass@(mysql:3306)/"
+    ports:
+      - "9104:9104"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # Prometheus (Almacén de métricas)
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus_rh
+    restart: unless-stopped
+    volumes:
+      # Archivo de configuración de Prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Volumen para guardar el histórico de las métricas
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - mysqld-exporter
+
+  # Grafana (Dashboards)
+  grafana:
+    image: grafana/grafana
+    container_name: grafana_rh
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Credenciales para entrar al panel web de Grafana
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "adminpassword"
+    volumes:
+      # Volumen para no perder los dashboards que vayamos creando
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+# Declaración explícita de todos los volúmenes persistentes
+volumes:
+  mysql_data:
+  prometheus_data:
+  grafana_data:
