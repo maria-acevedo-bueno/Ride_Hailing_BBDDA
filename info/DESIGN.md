@@ -132,3 +132,77 @@ flowchart LR
   D --- O
   A[AUDITORIA]
 ```
+
+## 6. Vistas
+
+Se definen dos vistas simples para reutilizar consultas frecuentes:
+
+- `v_viajes_activos`: muestra los viajes que siguen en estados operativos (`solicitado`, `aceptado`, `en_curso`).
+- `v_conductores_activos`: muestra los conductores marcados como activos.
+
+Estas vistas simplifican consultas repetidas y ayudan a separar la lógica de acceso a datos.
+
+## 7. Administración y configuración del SGBD
+
+La base de datos se ejecuta sobre MySQL 8 en Docker, con configuración adicional cargada desde `mysql/conf.d/custom.cnf`. Esta configuración se ha definido para mejorar consistencia, diagnóstico y preparación del entorno para fases posteriores del proyecto.
+
+### 7.1. Configuración aplicada
+
+Se han activado o ajustado los siguientes parámetros en `[mysqld]`:
+
+- `sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION`
+- `log_error_verbosity=3`
+- `slow_query_log=1`
+- `long_query_time=0.5`
+- `performance_schema=1`
+- `innodb_buffer_pool_size=256M`
+- `max_connections=200`
+- `innodb_flush_log_at_trx_commit=1`
+- `log_bin=mysql-bin`
+- `sync_binlog=1`
+- `binlog_expire_logs_seconds=604800`
+
+### 7.2. Justificación de la configuración
+
+#### Validación estricta
+
+Se utiliza `sql_mode` en modo estricto para evitar inserciones o actualizaciones silenciosamente incorrectas. Esto mejora la consistencia de los datos y encaja con el uso de restricciones como `NOT NULL`, `UNIQUE`, `CHECK` y claves foráneas.
+
+#### Logs y diagnóstico
+
+Se configura `log_error_verbosity=3` para obtener mayor detalle en el log de errores.
+
+Además, se activa `slow_query_log=1` con `long_query_time=0.5` para registrar consultas lentas. Esto permitirá analizar el rendimiento de consultas reales del proyecto en fases posteriores.
+
+#### Instrumentación
+
+Se activa `performance_schema=1` para disponer de métricas internas del servidor, como hilos, esperas y actividad del sistema. Esto será útil más adelante en temas de concurrencia y monitorización.
+
+#### Rendimiento
+
+Se fija `innodb_buffer_pool_size=256M` como valor razonable para un entorno de práctica en Docker, manteniendo un equilibrio entre uso de memoria y caché de InnoDB.
+
+También se define `max_connections=200`, suficiente para una práctica universitaria y útil para comprobar límites y métricas de conexiones.
+
+#### Durabilidad y binary log
+
+Se establece `innodb_flush_log_at_trx_commit=1` para priorizar durabilidad en cada `COMMIT`.
+
+Se activa `log_bin=mysql-bin` y `sync_binlog=1` para que el servidor mantenga binary logs consistentes. Esto deja preparado el entorno para temas posteriores como recuperación, PITR o replicación.
+
+Por último, `binlog_expire_logs_seconds=604800` mantiene los binlogs durante 7 días, evitando crecimiento indefinido en disco.
+
+### 7.3. Administración básica del servidor
+
+Durante esta fase se comprueba el servidor con comandos como:
+
+- `SHOW VARIABLES`
+- `SHOW STATUS`
+- `SHOW PROCESSLIST`
+- `SHOW VARIABLES LIKE '...'`
+- `SHOW STATUS LIKE '...'`
+- `SHOW BINARY LOGS`
+- `SHOW MASTER STATUS`
+- `SELECT * FROM performance_schema.threads LIMIT 10`
+
+Estas consultas permiten verificar que la configuración del servidor coincide con la esperada y que MySQL está funcionando correctamente dentro del contenedor.

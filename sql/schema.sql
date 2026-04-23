@@ -147,3 +147,30 @@ CREATE TABLE cabify.auditoria (
         accion IN ('INSERT', 'UPDATE', 'DELETE')
     )
 ) ENGINE = InnoDB;
+
+CREATE VIEW cabify.v_viajes_activos AS
+SELECT
+    id_viaje,
+    id_rider,
+    id_conductor,
+    estado,
+    fecha_solicitud
+FROM cabify.viaje
+WHERE
+    estado IN (
+        'solicitado',
+        'aceptado',
+        'en_curso'
+    );
+
+CREATE VIEW cabify.v_conductores_activos AS
+SELECT
+    id_conductor,
+    id_company,
+    dni,
+    nombre,
+    email,
+    telefono
+FROM cabify.conductor
+WHERE
+    activo = TRUE;

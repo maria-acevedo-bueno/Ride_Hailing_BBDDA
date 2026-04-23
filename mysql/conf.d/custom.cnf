@@ -24,3 +24,6 @@ log_bin=mysql-bin
 sync_binlog=1
 # Los bin logs se conservarán durante 7 días (604800 segundos)
 binlog_expire_logs_seconds=604800
+
+# Habilita performance_schema
+performance_schema=1
