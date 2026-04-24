@@ -3,7 +3,7 @@ DROP DATABASE IF EXISTS ride_hailing;
 CREATE DATABASE IF NOT EXISTS ride_hailing;
 USE ride_hailing;
 
--- 1. TABLAS MAESTRAS Y COMPAÑIAS
+-- 1. TABLAS MAESTRAS Y COMPANIES
 
 CREATE TABLE IF NOT EXISTS company (
 
@@ -199,33 +199,104 @@ CREATE TABLE IF NOT EXISTS viaje_estado_log (
 
 ) ENGINE=InnoDB;
 
--- 6. OBJETOS PROGRAMABLES (PROCEDIMIENTOS Y FUNCIONES)
+-- 6. PROCEDIMIENTOS ALMACENADOS
 
-DELIMITER //
+DELIMITER $$
 
--- Funcion para calculo centralizado de tarifas
-CREATE FUNCTION fn_calcular_precio_total(p_base DECIMAL(10,2)) 
-RETURNS DECIMAL(10,2)
-DETERMINISTIC
+-- Crea un viaje y genera ofertas para los conductores disponibles mediante un cursor.
+CREATE PROCEDURE sp_solicitar_viaje(
+    IN p_id_rider BIGINT,
+    IN p_origen_lat DECIMAL(9,6),
+    IN p_origen_lng DECIMAL(9,6),
+    IN p_destino_lat DECIMAL(9,6),
+    IN p_destino_lng DECIMAL(9,6),
+    IN p_origen_dir VARCHAR(255),
+    IN p_destino_dir VARCHAR(255),
+    IN p_distancia_km DECIMAL(10,2),
+    OUT p_id_viaje BIGINT,
+    OUT p_resultado VARCHAR(50)
+)
 BEGIN
-    RETURN p_base * 1.20; -- Aplicacion de margen del 20%
-END //
+    DECLARE v_importe_base DECIMAL(10,2);
+    DECLARE v_id_conductor BIGINT;
+    DECLARE fin BOOLEAN DEFAULT FALSE;
+    
+    -- Cursor para extraer únicamente a los conductores libres
+    DECLARE cur_conductores CURSOR FOR 
+        SELECT id_usuario FROM conductor WHERE estado_conductor = 'disponible';
+        
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET fin = TRUE;
+    
+    -- Si algo falla, deshacemos todo para no dejar datos a medias
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SET p_resultado = 'ERROR_TRANSACCION';
+    END;
 
--- Procedimiento de aceptacion con control de concurrencia
+    START TRANSACTION;
+
+    -- Registramos el viaje inicial
+    INSERT INTO viaje (
+        id_rider, estado, latitud_origen, longitud_origen, latitud_destino, longitud_destino, 
+        origen_direccion, destino_direccion, distancia_km, fecha_solicitud
+    ) VALUES (
+        p_id_rider, 'solicitado', p_origen_lat, p_origen_lng, p_destino_lat, p_destino_lng, 
+        p_origen_dir, p_destino_dir, p_distancia_km, CURRENT_TIMESTAMP
+    );
+    
+    -- Recuperamos el ID autogenerado y calculamos un precio base inicial
+    SET p_id_viaje = LAST_INSERT_ID();
+    SET v_importe_base = p_distancia_km * 1.50;
+
+    -- Recorremos los conductores libres para crearles una oferta pendiente a cada uno
+    OPEN cur_conductores;
+    
+    bucle_ofertas: LOOP
+        FETCH cur_conductores INTO v_id_conductor;
+        IF fin THEN 
+            LEAVE bucle_ofertas; 
+        END IF;
+        
+        INSERT INTO oferta (id_viaje, id_conductor, importe_ofrecido, estado_oferta)
+        VALUES (p_id_viaje, v_id_conductor, v_importe_base, 'pendiente');
+    END LOOP;
+    
+    CLOSE cur_conductores;
+
+    SET p_resultado = 'OK';
+    COMMIT;
+END$$
+
+-- Asigna el viaje al primer conductor que acepte usando bloqueos pesimistas.
 CREATE PROCEDURE sp_aceptar_oferta(
     IN p_id_viaje BIGINT,
     IN p_id_conductor BIGINT,
     IN p_id_vehiculo BIGINT,
-    OUT p_resultado VARCHAR(100)
+    OUT p_resultado VARCHAR(50)
 )
 BEGIN
     DECLARE v_estado_actual VARCHAR(20);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SET p_resultado = 'ERROR_TRANSACCION';
+    END;
+
     START TRANSACTION;
     
-    -- Bloqueo de fila para evitar colisiones de aceptacion
-    SELECT estado INTO v_estado_actual FROM viaje WHERE id_viaje = p_id_viaje FOR UPDATE;
+    -- Bloqueamos la fila del viaje. Si dos conductores intentan aceptar al mismo tiempo, 
+    -- el segundo se queda en espera aquí hasta que el primero termine.
+    SELECT estado INTO v_estado_actual 
+    FROM viaje 
+    WHERE id_viaje = p_id_viaje 
+    FOR UPDATE;
     
+    -- Solo continuamos si nadie más se nos ha adelantado
     IF v_estado_actual = 'solicitado' THEN
+        
+        -- Asignamos el viaje al ganador
         UPDATE viaje SET 
             estado = 'aceptado', 
             id_conductor = p_id_conductor, 
@@ -233,61 +304,90 @@ BEGIN
             fecha_aceptacion = CURRENT_TIMESTAMP
         WHERE id_viaje = p_id_viaje;
         
+        -- Marcamos su oferta como aceptada
         UPDATE oferta SET 
             estado_oferta = 'aceptada', 
             fecha_respuesta = CURRENT_TIMESTAMP
         WHERE id_viaje = p_id_viaje AND id_conductor = p_id_conductor;
         
+        -- Cancelamos las ofertas del resto de conductores para este mismo viaje
         UPDATE oferta SET estado_oferta = 'expirada'
         WHERE id_viaje = p_id_viaje AND id_conductor <> p_id_conductor AND estado_oferta = 'pendiente';
         
+        -- Marcamos al conductor ganador como ocupado
         UPDATE conductor SET estado_conductor = 'en_viaje' WHERE id_usuario = p_id_conductor;
         
         SET p_resultado = 'OK';
         COMMIT;
     ELSE
-        SET p_resultado = 'ERROR_NO_DISPONIBLE';
+        SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
         ROLLBACK;
     END IF;
-END //
+END$$
 
--- Procedimiento para generacion automatica de liquidaciones
-CREATE PROCEDURE sp_generar_liquidaciones()
+-- Cierra el viaje, libera al conductor y liquida el pago calculando la comisión.
+CREATE PROCEDURE sp_finalizar_viaje_y_pagar(
+    IN p_id_viaje BIGINT,
+    IN p_metodo_pago VARCHAR(50),
+    OUT p_resultado VARCHAR(50)
+)
 BEGIN
-    INSERT INTO pago (id_viaje, importe_total, comision_company, importe_conductor, metodo_pago, estado_pago)
-    SELECT 
-        v.id_viaje,
-        fn_calcular_precio_total(o.importe_ofrecido),
-        o.importe_ofrecido * 0.20,
-        o.importe_ofrecido,
-        'tarjeta_credito',
-        'pendiente'
-    FROM viaje v
-    JOIN oferta o ON v.id_viaje = o.id_viaje AND o.estado_oferta = 'aceptada'
-    LEFT JOIN pago p ON v.id_viaje = p.id_viaje
-    WHERE v.estado = 'finalizado' AND p.id_pago IS NULL;
-END //
+    DECLARE v_estado_actual VARCHAR(20);
+    DECLARE v_id_conductor BIGINT;
+    DECLARE v_importe_ofrecido DECIMAL(10,2);
+    DECLARE v_importe_total DECIMAL(10,2);
+    DECLARE v_comision DECIMAL(10,2);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SET p_resultado = 'ERROR_TRANSACCION';
+    END;
 
--- 7. EVENTOS Y TRIGGERS
+    START TRANSACTION;
+    
+    -- Bloqueamos el viaje antes de operar
+    SELECT estado, id_conductor INTO v_estado_actual, v_id_conductor 
+    FROM viaje WHERE id_viaje = p_id_viaje FOR UPDATE;
+    
+    IF v_estado_actual = 'en_curso' THEN
+        
+        -- Finalizamos el viaje y volvemos a poner al conductor disponible
+        UPDATE viaje SET estado = 'finalizado', fecha_fin = CURRENT_TIMESTAMP WHERE id_viaje = p_id_viaje;
+        UPDATE conductor SET estado_conductor = 'disponible' WHERE id_usuario = v_id_conductor;
+        
+        -- Recuperamos el importe base que se acordó
+        SELECT importe_ofrecido INTO v_importe_ofrecido 
+        FROM oferta WHERE id_viaje = p_id_viaje AND estado_oferta = 'aceptada' LIMIT 1;
+        
+        -- Aplicamos el 20% de margen de la plataforma
+        SET v_importe_total = v_importe_ofrecido * 1.20;
+        SET v_comision = v_importe_total - v_importe_ofrecido;
+        
+        -- Guardamos el recibo
+        INSERT INTO pago (id_viaje, importe_total, comision_company, importe_conductor, metodo_pago, estado_pago, fecha_pago)
+        VALUES (p_id_viaje, v_importe_total, v_comision, v_importe_ofrecido, p_metodo_pago, 'completado', CURRENT_TIMESTAMP);
+        
+        SET p_resultado = 'OK';
+        COMMIT;
+    ELSE
+        SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
+        ROLLBACK;
+    END IF;
+END$$
 
--- Evento de mantenimiento para expirar ofertas huerfanas
-CREATE EVENT ev_limpiar_ofertas_caducadas
-ON SCHEDULE EVERY 1 MINUTE
-DO
-    UPDATE oferta 
-    SET estado_oferta = 'expirada'
-    WHERE estado_oferta = 'pendiente' 
-    AND fecha_envio < (CURRENT_TIMESTAMP - INTERVAL 5 MINUTE);
+-- 7. TRIGGERS
 
--- Trigger de auditoria automatica
+-- Registra de forma automática cualquier cambio de estado en los viajes
 CREATE TRIGGER tr_audit_viaje_estado
 AFTER UPDATE ON viaje
 FOR EACH ROW
 BEGIN
-    IF OLD.estado <> NEW.estado THEN
+    -- Comprobamos si el estado realmente ha cambiado usando <=> para evitar problemas con nulos
+    IF NOT (OLD.estado <=> NEW.estado) THEN
         INSERT INTO viaje_estado_log (id_viaje, estado_anterior, estado_nuevo, comentario)
-        VALUES (NEW.id_viaje, OLD.estado, NEW.estado, 'Actualizacion automatica de estado');
+        VALUES (NEW.id_viaje, OLD.estado, NEW.estado, 'Actualizacion de estado');
     END IF;
-END //
+END$$
 
 DELIMITER ;
