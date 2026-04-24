@@ -1,153 +1,203 @@
 -- CONFIGURACION DEL ESQUEMA OPERATIVO
+DROP DATABASE IF EXISTS ride_hailing;
 CREATE DATABASE IF NOT EXISTS ride_hailing;
 USE ride_hailing;
 
 -- 1. TABLAS MAESTRAS Y COMPAÑIAS
 
 CREATE TABLE IF NOT EXISTS company (
-    id_company BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_company BIGINT NOT NULL AUTO_INCREMENT,
     nombre VARCHAR(100) NOT NULL,
-    cif VARBINARY(255) NOT NULL UNIQUE, -- Almacenamiento cifrado para datos sensibles
-    fecha_alta DATE DEFAULT (CURRENT_DATE),
-    activa BOOLEAN DEFAULT TRUE,
-    INDEX idx_company_nombre (nombre)
+    cif VARCHAR(9) NOT NULL,
+    fecha_alta DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    fecha_modificacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+    activo BOOLEAN DEFAULT TRUE NOT NULL,
+
+    PRIMARY KEY (id_company),
+    CONSTRAINT uk_company_cif UNIQUE (cif)
+
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS usuario (
-    id_usuario BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_usuario BIGINT NOT NULL AUTO_INCREMENT,
     nombre VARCHAR(50) NOT NULL,
     apellido1 VARCHAR(50) NOT NULL,
     apellido2 VARCHAR(50),
-    email VARCHAR(100) NOT NULL UNIQUE,
-    telefono VARBINARY(255) NOT NULL UNIQUE, -- Almacenamiento cifrado
-    fecha_alta DATE DEFAULT (CURRENT_DATE),
-    activo BOOLEAN DEFAULT TRUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_usuario_email (email)
+    email VARCHAR(150) NOT NULL,
+    telefono VARCHAR(20) NOT NULL,
+    fecha_alta DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    fecha_modificacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+    activo BOOLEAN DEFAULT TRUE NOT NULL,
+
+    PRIMARY KEY (id_usuario),
+    CONSTRAINT uk_usuario_email UNIQUE (email),
+    CONSTRAINT uk_usuario_telefono UNIQUE (telefono)
+
 ) ENGINE=InnoDB;
 
 -- 2. ESPECIALIZACION DE USUARIOS
 
 CREATE TABLE IF NOT EXISTS rider (
-    id_usuario BIGINT PRIMARY KEY,
+
+    id_usuario BIGINT NOT NULL,
+
+    PRIMARY KEY (id_usuario),
     CONSTRAINT fk_rider_usuario FOREIGN KEY (id_usuario) 
-        REFERENCES usuario(id_usuario) ON DELETE CASCADE
+        REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT
+
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS conductor (
-    id_usuario BIGINT PRIMARY KEY,
-    numero_licencia VARCHAR(50) NOT NULL UNIQUE,
-    estado_conductor ENUM('disponible', 'en_viaje', 'desconectado', 'suspendido') DEFAULT 'desconectado',
-    fecha_alta_conductor DATE DEFAULT (CURRENT_DATE),
-    id_company BIGINT,
+    
+    id_usuario BIGINT NOT NULL,
+    numero_licencia VARCHAR(50) NOT NULL,
+    estado_conductor ENUM('disponible', 'en_viaje', 'desconectado', 'suspendido') DEFAULT 'desconectado' NOT NULL,
+    fecha_alta_conductor DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    fecha_modificacion_conductor DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+    id_company BIGINT NOT NULL,
+
+    PRIMARY KEY (id_usuario),
+    CONSTRAINT uk_conductor_licencia UNIQUE (numero_licencia),
     CONSTRAINT fk_conductor_usuario FOREIGN KEY (id_usuario) 
-        REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+        REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_conductor_company FOREIGN KEY (id_company) 
-        REFERENCES company(id_company) ON DELETE SET NULL,
+        REFERENCES company(id_company) ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    INDEX idx_conductor_company (id_company),
     INDEX idx_conductor_estado (estado_conductor)
+
 ) ENGINE=InnoDB;
 
 -- 3. GESTION DE FLOTA Y VIAJES
 
 CREATE TABLE IF NOT EXISTS vehiculo (
-    id_vehiculo BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_vehiculo BIGINT NOT NULL AUTO_INCREMENT,
     id_company BIGINT NOT NULL,
-    matricula VARCHAR(20) NOT NULL UNIQUE,
+    matricula VARCHAR(20) NOT NULL,
     marca VARCHAR(50) NOT NULL,
     modelo VARCHAR(50) NOT NULL,
-    color VARCHAR(30),
-    anio INT,
-    capacidad INT DEFAULT 4,
-    activo BOOLEAN DEFAULT TRUE,
+    color VARCHAR(30) NOT NULL,
+    capacidad INT DEFAULT 4 NOT NULL,
+    activo BOOLEAN DEFAULT TRUE NOT NULL,
+
+    PRIMARY KEY (id_vehiculo),
+    CONSTRAINT uk_vehiculo_matricula UNIQUE (matricula),
     CONSTRAINT fk_vehiculo_company FOREIGN KEY (id_company) 
-        REFERENCES company(id_company) ON DELETE CASCADE
+        REFERENCES company(id_company) ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    INDEX idx_vehiculo_company (id_company)
+
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS viaje (
-    id_viaje BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_viaje BIGINT NOT NULL AUTO_INCREMENT,
     id_rider BIGINT NOT NULL,
-    id_conductor BIGINT,
-    id_vehiculo BIGINT,
-    estado ENUM('solicitado', 'aceptado', 'en_curso', 'finalizado', 'cancelado') DEFAULT 'solicitado',
-    fecha_solicitud DATETIME DEFAULT CURRENT_TIMESTAMP,
-    fecha_aceptacion DATETIME,
-    fecha_inicio DATETIME,
-    fecha_fin DATETIME,
-    -- Uso de tipos espaciales para optimizar calculos de cercania
-    ubicacion_origen POINT NOT NULL SRID 4326,
-    ubicacion_destino POINT NOT NULL SRID 4326,
-    origen_direccion VARCHAR(255),
-    destino_direccion VARCHAR(255),
-    distancia_km DECIMAL(10, 2),
-    cancelado_por ENUM('rider', 'conductor', 'sistema'),
-    motivo_cancelacion TEXT,
-    SPATIAL INDEX idx_viaje_origen (ubicacion_origen),
+    id_conductor BIGINT NULL,
+    id_vehiculo BIGINT NULL,
+    estado ENUM('solicitado', 'aceptado', 'en_curso', 'finalizado', 'cancelado') DEFAULT 'solicitado' NOT NULL,
+    fecha_solicitud DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    fecha_aceptacion DATETIME NULL,
+    fecha_inicio DATETIME NULL,
+    fecha_fin DATETIME NULL,
+    latitud_origen DECIMAL(9, 6) NOT NULL,
+    longitud_origen DECIMAL(9, 6) NOT NULL,
+    latitud_destino DECIMAL(9, 6) NOT NULL,
+    longitud_destino DECIMAL(9, 6) NOT NULL,
+    origen_direccion VARCHAR(255) NOT NULL,
+    destino_direccion VARCHAR(255) NOT NULL,
+    distancia_km DECIMAL(10, 2) NULL,
+    cancelado_por ENUM('rider', 'conductor', 'sistema') NULL,
+    motivo_cancelacion VARCHAR(255) NULL,
+
+    PRIMARY KEY (id_viaje),
     CONSTRAINT fk_viaje_rider FOREIGN KEY (id_rider) REFERENCES rider(id_usuario),
     CONSTRAINT fk_viaje_conductor FOREIGN KEY (id_conductor) REFERENCES conductor(id_usuario),
     CONSTRAINT fk_viaje_vehiculo FOREIGN KEY (id_vehiculo) REFERENCES vehiculo(id_vehiculo),
-    INDEX idx_viaje_busqueda (id_rider, estado) -- Indice compuesto para operativa frecuente
+
+    INDEX idx_viaje_estado_fecha (estado, fecha_solicitud),
+    INDEX idx_viaje_conductor_fecha (id_conductor, fecha_solicitud),
+    INDEX idx_viaje_rider_fecha (id_rider, fecha_solicitud)
+
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS oferta (
-    id_oferta BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_oferta BIGINT NOT NULL AUTO_INCREMENT,
     id_viaje BIGINT NOT NULL,
     id_conductor BIGINT NOT NULL,
-    fecha_envio DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_envio DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     fecha_respuesta DATETIME,
-    estado_oferta ENUM('pendiente', 'aceptada', 'rechazada', 'expirada') DEFAULT 'pendiente',
+    estado_oferta ENUM('pendiente', 'aceptada', 'rechazada', 'expirada') DEFAULT 'pendiente' NOT NULL,
     importe_ofrecido DECIMAL(10, 2) NOT NULL,
-    CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON DELETE CASCADE,
-    CONSTRAINT fk_oferta_conductor FOREIGN KEY (id_conductor) REFERENCES conductor(id_usuario),
-    INDEX idx_oferta_viaje (id_viaje),
+
+    PRIMARY KEY (id_oferta),
+    CONSTRAINT uk_oferta_viaje_conductor UNIQUE (id_viaje, id_conductor),
+    CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_oferta_conductor FOREIGN KEY (id_conductor) REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    
     INDEX idx_oferta_estado (estado_oferta)
+
 ) ENGINE=InnoDB;
 
 -- 4. ECONOMIA Y VALORACIONES
 
 CREATE TABLE IF NOT EXISTS pago (
-    id_pago BIGINT AUTO_INCREMENT PRIMARY KEY,
-    id_viaje BIGINT NOT NULL UNIQUE,
+
+    id_pago BIGINT NOT NULL AUTO_INCREMENT ,
+    id_viaje BIGINT NOT NULL,
     importe_total DECIMAL(10, 2) NOT NULL,
     comision_company DECIMAL(10, 2) NOT NULL,
     importe_conductor DECIMAL(10, 2) NOT NULL,
-    metodo_pago ENUM('tarjeta_credito', 'efectivo', 'wallet') DEFAULT 'tarjeta_credito',
-    estado_pago ENUM('pendiente', 'completado', 'fallido', 'reembolsado') DEFAULT 'pendiente',
-    fecha_pago DATETIME,
-    CONSTRAINT fk_pago_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje),
+    metodo_pago ENUM('tarjeta_credito', 'efectivo', 'wallet') DEFAULT 'tarjeta_credito' NOT NULL,
+    estado_pago ENUM('pendiente', 'completado', 'fallido', 'reembolsado') DEFAULT 'pendiente' NOT NULL,
+    fecha_pago DATETIME NOT NULL,
+
+    PRIMARY KEY (id_pago),
+    CONSTRAINT uk_pago_viaje UNIQUE (id_viaje),
+    CONSTRAINT fk_pago_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT ck_pago_sumas CHECK (importe_total = comision_company + importe_conductor)
+
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS valoracion (
-    id_valoracion BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+    id_valoracion BIGINT NOT NULL AUTO_INCREMENT,
     id_viaje BIGINT NOT NULL,
     id_usuario_valorador BIGINT NOT NULL,
     id_usuario_valorado BIGINT NOT NULL,
     rol_valorado ENUM('rider', 'conductor') NOT NULL,
     puntuacion TINYINT NOT NULL CHECK (puntuacion BETWEEN 1 AND 5),
-    comentario TEXT,
-    fecha_valoracion DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_val_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje),
-    CONSTRAINT fk_val_valorador FOREIGN KEY (id_usuario_valorador) REFERENCES usuario(id_usuario),
-    CONSTRAINT fk_val_valorado FOREIGN KEY (id_usuario_valorado) REFERENCES usuario(id_usuario)
+    comentario VARCHAR(255) NULL,
+    fecha_valoracion DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+
+    PRIMARY KEY (id_valoracion),
+    CONSTRAINT fk_val_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_val_valorador FOREIGN KEY (id_usuario_valorador) REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_val_valorado FOREIGN KEY (id_usuario_valorado) REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT
+
 ) ENGINE=InnoDB;
 
--- 5. AUDITORIA CON PARTICIONADO
+-- 5. AUDITORIA
 
 CREATE TABLE IF NOT EXISTS viaje_estado_log (
-    id_historial BIGINT AUTO_INCREMENT,
+
+    id_historial BIGINT NOT NULL AUTO_INCREMENT,
     id_viaje BIGINT NOT NULL,
-    estado_anterior ENUM('solicitado', 'aceptado', 'en_curso', 'finalizado', 'cancelado'),
+    estado_anterior ENUM('solicitado', 'aceptado', 'en_curso', 'finalizado', 'cancelado') NOT NULL,
     estado_nuevo ENUM('solicitado', 'aceptado', 'en_curso', 'finalizado', 'cancelado') NOT NULL,
-    fecha_cambio DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_cambio DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     comentario VARCHAR(255),
-    PRIMARY KEY (id_historial, fecha_cambio)
-) ENGINE=InnoDB
-PARTITION BY RANGE (YEAR(fecha_cambio)) (
-    PARTITION p_old VALUES LESS THAN (2025),
-    PARTITION p_2025 VALUES LESS THAN (2026),
-    PARTITION p_future VALUES LESS THAN MAXVALUE
-);
+
+    PRIMARY KEY (id_historial, fecha_cambio),
+    CONSTRAINT fk_log_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    INDEX idx_log_viaje_fecha (id_viaje, fecha_cambio)
+
+) ENGINE=InnoDB;
 
 -- 6. OBJETOS PROGRAMABLES (PROCEDIMIENTOS Y FUNCIONES)
 
