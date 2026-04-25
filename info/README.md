@@ -112,6 +112,13 @@ erDiagram
         INT capacidad 
         BOOLEAN activo 
     }
+
+    CONDUCTOR_VEHICULO {
+        BIGINT id_conductor PK, FK
+        BIGINT id_vehiculo PK, FK
+        DATETIME fecha_desde PK
+        DATETIME fecha_hasta 
+    }
     
     VIAJE {
         BIGINT id_viaje PK
@@ -179,6 +186,9 @@ erDiagram
     COMPANY ||--o{ VEHICULO : "gestiona"
     USUARIO ||--|| CONDUCTOR : "es_un"
     USUARIO ||--|| RIDER : "es_un"
+    
+    CONDUCTOR ||--o{ CONDUCTOR_VEHICULO : "tiene_asignado"
+    VEHICULO ||--o{ CONDUCTOR_VEHICULO : "asignado_a"
     
     CONDUCTOR ||--o{ VIAJE : "realiza"
     RIDER ||--o{ VIAJE : "solicita"

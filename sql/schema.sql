@@ -92,6 +92,21 @@ CREATE TABLE IF NOT EXISTS vehiculo (
 
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS conductor_vehiculo (
+    id_conductor BIGINT NOT NULL,
+    id_vehiculo BIGINT NOT NULL,
+    fecha_desde DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    fecha_hasta DATETIME NULL, -- Si es NULL, la asignación está vigente
+
+    PRIMARY KEY (id_conductor, id_vehiculo, fecha_desde),
+    
+    CONSTRAINT fk_cv_conductor FOREIGN KEY (id_conductor) 
+        REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_cv_vehiculo FOREIGN KEY (id_vehiculo) 
+        REFERENCES vehiculo(id_vehiculo) ON UPDATE CASCADE ON DELETE RESTRICT
+
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS viaje (
 
     id_viaje BIGINT NOT NULL AUTO_INCREMENT,
