@@ -87,6 +87,7 @@ CREATE ROLE IF NOT EXISTS 'rol_admin';
 CREATE ROLE IF NOT EXISTS 'rol_app';
 CREATE ROLE IF NOT EXISTS 'rol_analista';
 CREATE ROLE IF NOT EXISTS 'rol_backup';
+CREATE ROLE IF NOT EXISTS 'rol_readonly';
 
 -- 3. ASIGNACION DE PRIVILEGIOS
 
@@ -105,6 +106,7 @@ GRANT INSERT ON ride_hailing.valoracion TO 'rol_app';
 -- ejecución de lógica de negocio
 GRANT EXECUTE ON PROCEDURE ride_hailing.sp_solicitar_viaje TO 'rol_app';
 GRANT EXECUTE ON PROCEDURE ride_hailing.sp_aceptar_oferta TO 'rol_app';
+GRANT EXECUTE ON PROCEDURE ride_hailing.sp_iniciar_viaje TO 'rol_app';
 GRANT EXECUTE ON PROCEDURE ride_hailing.sp_finalizar_viaje_y_pagar TO 'rol_app';
 
 -- Rol de analista:
@@ -113,6 +115,15 @@ GRANT SELECT ON ride_hailing.v_usuarios_anonimizados TO 'rol_analista';
 GRANT SELECT ON ride_hailing.v_pagos_analitica TO 'rol_analista';
 GRANT SELECT ON ride_hailing.v_viaje_estado_log_resumen TO 'rol_analista';
 GRANT SELECT ON ride_hailing.v_viajes_operativos TO 'rol_analista';
+
+-- Rol de solo lectura:
+-- pensado para consultas funcionales sin permisos de escritura
+GRANT SELECT ON ride_hailing.v_usuarios_anonimizados TO 'rol_readonly';
+GRANT SELECT ON ride_hailing.v_conductores_disponibles TO 'rol_readonly';
+GRANT SELECT ON ride_hailing.v_viajes_operativos TO 'rol_readonly';
+GRANT SELECT ON ride_hailing.v_ofertas_operativas TO 'rol_readonly';
+GRANT SELECT ON ride_hailing.v_pagos_analitica TO 'rol_readonly';
+GRANT SELECT ON ride_hailing.v_viaje_estado_log_resumen TO 'rol_readonly';
 
 -- Rol de backup:
 -- lectura del esquema y objetos necesarios para copias lógicas
@@ -137,6 +148,10 @@ CREATE USER IF NOT EXISTS 'analyst_user'@'%' IDENTIFIED BY 'Analyst_Pass_2026!';
 GRANT 'rol_analista' TO 'analyst_user'@'%';
 SET DEFAULT ROLE 'rol_analista' TO 'analyst_user'@'%';
 
+CREATE USER IF NOT EXISTS 'readonly_user'@'%' IDENTIFIED BY 'Readonly_Pass_2026!';
+GRANT 'rol_readonly' TO 'readonly_user'@'%';
+SET DEFAULT ROLE 'rol_readonly' TO 'readonly_user'@'%';
+
 CREATE USER IF NOT EXISTS 'backup_user'@'%' IDENTIFIED BY 'Backup_Pass_2026!';
 GRANT 'rol_backup' TO 'backup_user'@'%';
 SET DEFAULT ROLE 'rol_backup' TO 'backup_user'@'%';
@@ -146,11 +161,13 @@ SET DEFAULT ROLE 'rol_backup' TO 'backup_user'@'%';
 SHOW GRANTS FOR 'admin_user'@'%';
 SHOW GRANTS FOR 'backend_user'@'%';
 SHOW GRANTS FOR 'analyst_user'@'%';
+SHOW GRANTS FOR 'readonly_user'@'%';
 SHOW GRANTS FOR 'backup_user'@'%';
 
 SHOW GRANTS FOR 'rol_admin';
 SHOW GRANTS FOR 'rol_app';
 SHOW GRANTS FOR 'rol_analista';
+SHOW GRANTS FOR 'rol_readonly';
 SHOW GRANTS FOR 'rol_backup';
 
 FLUSH PRIVILEGES;
