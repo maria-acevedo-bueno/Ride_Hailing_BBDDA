@@ -1,6 +1,6 @@
 -- CONFIGURACION DEL ESQUEMA OPERATIVO
 DROP DATABASE IF EXISTS ride_hailing;
-CREATE DATABASE IF NOT EXISTS ride_hailing;
+CREATE DATABASE ride_hailing;
 USE ride_hailing;
 
 -- 1. TABLAS MAESTRAS Y COMPANIES
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS company (
     PRIMARY KEY (id_company),
     CONSTRAINT uk_company_cif UNIQUE (cif)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS usuario (
 
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS usuario (
     CONSTRAINT uk_usuario_email UNIQUE (email),
     CONSTRAINT uk_usuario_telefono UNIQUE (telefono)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 2. ESPECIALIZACION DE USUARIOS
 
@@ -44,13 +44,13 @@ CREATE TABLE IF NOT EXISTS rider (
     id_usuario BIGINT NOT NULL,
 
     PRIMARY KEY (id_usuario),
-    CONSTRAINT fk_rider_usuario FOREIGN KEY (id_usuario) 
+    CONSTRAINT fk_rider_usuario FOREIGN KEY (id_usuario)
         REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS conductor (
-    
+
     id_usuario BIGINT NOT NULL,
     numero_licencia VARCHAR(50) NOT NULL,
     estado_conductor ENUM('disponible', 'en_viaje', 'desconectado', 'suspendido') DEFAULT 'desconectado' NOT NULL,
@@ -60,15 +60,15 @@ CREATE TABLE IF NOT EXISTS conductor (
 
     PRIMARY KEY (id_usuario),
     CONSTRAINT uk_conductor_licencia UNIQUE (numero_licencia),
-    CONSTRAINT fk_conductor_usuario FOREIGN KEY (id_usuario) 
+    CONSTRAINT fk_conductor_usuario FOREIGN KEY (id_usuario)
         REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_conductor_company FOREIGN KEY (id_company) 
+    CONSTRAINT fk_conductor_company FOREIGN KEY (id_company)
         REFERENCES company(id_company) ON UPDATE CASCADE ON DELETE RESTRICT,
 
     INDEX idx_conductor_company (id_company),
     INDEX idx_conductor_estado (estado_conductor)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 3. GESTION DE FLOTA Y VIAJES
 
@@ -85,27 +85,32 @@ CREATE TABLE IF NOT EXISTS vehiculo (
 
     PRIMARY KEY (id_vehiculo),
     CONSTRAINT uk_vehiculo_matricula UNIQUE (matricula),
-    CONSTRAINT fk_vehiculo_company FOREIGN KEY (id_company) 
+    CONSTRAINT fk_vehiculo_company FOREIGN KEY (id_company)
         REFERENCES company(id_company) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT ck_vehiculo_capacidad CHECK (capacidad > 0),
 
     INDEX idx_vehiculo_company (id_company)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS conductor_vehiculo (
+
     id_conductor BIGINT NOT NULL,
     id_vehiculo BIGINT NOT NULL,
     fecha_desde DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    fecha_hasta DATETIME NULL, -- Si es NULL, la asignación está vigente
+    fecha_hasta DATETIME NULL,
 
     PRIMARY KEY (id_conductor, id_vehiculo, fecha_desde),
-    
-    CONSTRAINT fk_cv_conductor FOREIGN KEY (id_conductor) 
-        REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_cv_vehiculo FOREIGN KEY (id_vehiculo) 
-        REFERENCES vehiculo(id_vehiculo) ON UPDATE CASCADE ON DELETE RESTRICT
 
-) ENGINE=InnoDB;
+    CONSTRAINT fk_cv_conductor FOREIGN KEY (id_conductor)
+        REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_cv_vehiculo FOREIGN KEY (id_vehiculo)
+        REFERENCES vehiculo(id_vehiculo) ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    INDEX idx_cv_conductor_vigente (id_conductor, fecha_hasta),
+    INDEX idx_cv_vehiculo_vigente (id_vehiculo, fecha_hasta)
+
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS viaje (
 
@@ -129,15 +134,24 @@ CREATE TABLE IF NOT EXISTS viaje (
     motivo_cancelacion VARCHAR(255) NULL,
 
     PRIMARY KEY (id_viaje),
-    CONSTRAINT fk_viaje_rider FOREIGN KEY (id_rider) REFERENCES rider(id_usuario),
-    CONSTRAINT fk_viaje_conductor FOREIGN KEY (id_conductor) REFERENCES conductor(id_usuario),
-    CONSTRAINT fk_viaje_vehiculo FOREIGN KEY (id_vehiculo) REFERENCES vehiculo(id_vehiculo),
+    CONSTRAINT fk_viaje_rider FOREIGN KEY (id_rider)
+        REFERENCES rider(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_viaje_conductor FOREIGN KEY (id_conductor)
+        REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_viaje_vehiculo FOREIGN KEY (id_vehiculo)
+        REFERENCES vehiculo(id_vehiculo) ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    CONSTRAINT ck_viaje_lat_origen CHECK (latitud_origen BETWEEN -90 AND 90),
+    CONSTRAINT ck_viaje_lng_origen CHECK (longitud_origen BETWEEN -180 AND 180),
+    CONSTRAINT ck_viaje_lat_destino CHECK (latitud_destino BETWEEN -90 AND 90),
+    CONSTRAINT ck_viaje_lng_destino CHECK (longitud_destino BETWEEN -180 AND 180),
+    CONSTRAINT ck_viaje_distancia CHECK (distancia_km IS NULL OR distancia_km >= 0),
 
     INDEX idx_viaje_estado_fecha (estado, fecha_solicitud),
     INDEX idx_viaje_conductor_fecha (id_conductor, fecha_solicitud),
     INDEX idx_viaje_rider_fecha (id_rider, fecha_solicitud)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS oferta (
 
@@ -145,24 +159,29 @@ CREATE TABLE IF NOT EXISTS oferta (
     id_viaje BIGINT NOT NULL,
     id_conductor BIGINT NOT NULL,
     fecha_envio DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    fecha_respuesta DATETIME,
+    fecha_respuesta DATETIME NULL,
     estado_oferta ENUM('pendiente', 'aceptada', 'rechazada', 'expirada') DEFAULT 'pendiente' NOT NULL,
     importe_ofrecido DECIMAL(10, 2) NOT NULL,
 
     PRIMARY KEY (id_oferta),
     CONSTRAINT uk_oferta_viaje_conductor UNIQUE (id_viaje, id_conductor),
-    CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_oferta_conductor FOREIGN KEY (id_conductor) REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
-    
-    INDEX idx_oferta_estado (estado_oferta)
+    CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje)
+        REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_oferta_conductor FOREIGN KEY (id_conductor)
+        REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT ck_oferta_importe CHECK (importe_ofrecido >= 0),
 
-) ENGINE=InnoDB;
+    INDEX idx_oferta_estado (estado_oferta),
+    INDEX idx_oferta_viaje_conductor_estado (id_viaje, id_conductor, estado_oferta),
+    INDEX idx_oferta_viaje_estado (id_viaje, estado_oferta)
+
+) ENGINE = InnoDB;
 
 -- 4. ECONOMIA Y VALORACIONES
 
 CREATE TABLE IF NOT EXISTS pago (
 
-    id_pago BIGINT NOT NULL AUTO_INCREMENT ,
+    id_pago BIGINT NOT NULL AUTO_INCREMENT,
     id_viaje BIGINT NOT NULL,
     importe_total DECIMAL(10, 2) NOT NULL,
     comision_company DECIMAL(10, 2) NOT NULL,
@@ -173,10 +192,14 @@ CREATE TABLE IF NOT EXISTS pago (
 
     PRIMARY KEY (id_pago),
     CONSTRAINT uk_pago_viaje UNIQUE (id_viaje),
-    CONSTRAINT fk_pago_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT ck_pago_sumas CHECK (importe_total = comision_company + importe_conductor)
+    CONSTRAINT fk_pago_viaje FOREIGN KEY (id_viaje)
+        REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT ck_pago_sumas CHECK (importe_total = comision_company + importe_conductor),
+    CONSTRAINT ck_pago_total CHECK (importe_total >= 0),
+    CONSTRAINT ck_pago_comision CHECK (comision_company >= 0),
+    CONSTRAINT ck_pago_conductor CHECK (importe_conductor >= 0)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS valoracion (
 
@@ -190,11 +213,14 @@ CREATE TABLE IF NOT EXISTS valoracion (
     fecha_valoracion DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
     PRIMARY KEY (id_valoracion),
-    CONSTRAINT fk_val_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_val_valorador FOREIGN KEY (id_usuario_valorador) REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_val_valorado FOREIGN KEY (id_usuario_valorado) REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT
+    CONSTRAINT fk_val_viaje FOREIGN KEY (id_viaje)
+        REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_val_valorador FOREIGN KEY (id_usuario_valorador)
+        REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_val_valorado FOREIGN KEY (id_usuario_valorado)
+        REFERENCES usuario(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 5. AUDITORIA
 
@@ -207,18 +233,19 @@ CREATE TABLE IF NOT EXISTS viaje_estado_log (
     fecha_cambio DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     comentario VARCHAR(255),
 
-    PRIMARY KEY (id_historial, fecha_cambio),
-    CONSTRAINT fk_log_viaje FOREIGN KEY (id_viaje) REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+    PRIMARY KEY (id_historial),
+    CONSTRAINT fk_log_viaje FOREIGN KEY (id_viaje)
+        REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
 
     INDEX idx_log_viaje_fecha (id_viaje, fecha_cambio)
 
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 6. PROCEDIMIENTOS ALMACENADOS
 
+DROP PROCEDURE IF EXISTS sp_solicitar_viaje;
 DELIMITER $$
 
--- Crea un viaje y genera ofertas para los conductores disponibles mediante un cursor.
 CREATE PROCEDURE sp_solicitar_viaje(
     IN p_id_rider BIGINT,
     IN p_origen_lat DECIMAL(9,6),
@@ -233,16 +260,8 @@ CREATE PROCEDURE sp_solicitar_viaje(
 )
 BEGIN
     DECLARE v_importe_base DECIMAL(10,2);
-    DECLARE v_id_conductor BIGINT;
-    DECLARE fin BOOLEAN DEFAULT FALSE;
-    
-    -- Cursor para extraer únicamente a los conductores libres
-    DECLARE cur_conductores CURSOR FOR 
-        SELECT id_usuario FROM conductor WHERE estado_conductor = 'disponible';
-        
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET fin = TRUE;
-    
-    -- Si algo falla, deshacemos todo para no dejar datos a medias
+    DECLARE v_ofertas_generadas INT DEFAULT 0;
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -251,39 +270,73 @@ BEGIN
 
     START TRANSACTION;
 
-    -- Registramos el viaje inicial
     INSERT INTO viaje (
-        id_rider, estado, latitud_origen, longitud_origen, latitud_destino, longitud_destino, 
-        origen_direccion, destino_direccion, distancia_km, fecha_solicitud
+        id_rider,
+        estado,
+        latitud_origen,
+        longitud_origen,
+        latitud_destino,
+        longitud_destino,
+        origen_direccion,
+        destino_direccion,
+        distancia_km,
+        fecha_solicitud
     ) VALUES (
-        p_id_rider, 'solicitado', p_origen_lat, p_origen_lng, p_destino_lat, p_destino_lng, 
-        p_origen_dir, p_destino_dir, p_distancia_km, CURRENT_TIMESTAMP
+        p_id_rider,
+        'solicitado',
+        p_origen_lat,
+        p_origen_lng,
+        p_destino_lat,
+        p_destino_lng,
+        p_origen_dir,
+        p_destino_dir,
+        p_distancia_km,
+        CURRENT_TIMESTAMP
     );
-    
-    -- Recuperamos el ID autogenerado y calculamos un precio base inicial
+
     SET p_id_viaje = LAST_INSERT_ID();
     SET v_importe_base = p_distancia_km * 1.50;
 
-    -- Recorremos los conductores libres para crearles una oferta pendiente a cada uno
-    OPEN cur_conductores;
-    
-    bucle_ofertas: LOOP
-        FETCH cur_conductores INTO v_id_conductor;
-        IF fin THEN 
-            LEAVE bucle_ofertas; 
-        END IF;
-        
-        INSERT INTO oferta (id_viaje, id_conductor, importe_ofrecido, estado_oferta)
-        VALUES (p_id_viaje, v_id_conductor, v_importe_base, 'pendiente');
-    END LOOP;
-    
-    CLOSE cur_conductores;
+    INSERT INTO oferta (
+        id_viaje,
+        id_conductor,
+        importe_ofrecido,
+        estado_oferta
+    )
+    SELECT
+        p_id_viaje,
+        c.id_usuario,
+        v_importe_base,
+        'pendiente'
+    FROM conductor c
+    WHERE c.estado_conductor = 'disponible'
+      AND EXISTS (
+            SELECT 1
+            FROM conductor_vehiculo cv
+            JOIN vehiculo v ON v.id_vehiculo = cv.id_vehiculo
+            WHERE cv.id_conductor = c.id_usuario
+              AND cv.fecha_hasta IS NULL
+              AND v.activo = TRUE
+      );
 
-    SET p_resultado = 'OK';
-    COMMIT;
+    SET v_ofertas_generadas = ROW_COUNT();
+
+    IF v_ofertas_generadas = 0 THEN
+        ROLLBACK;
+        SET p_id_viaje = NULL;
+        SET p_resultado = 'ERROR_SIN_CONDUCTORES_DISPONIBLES';
+    ELSE
+        COMMIT;
+        SET p_resultado = 'OK';
+    END IF;
 END$$
 
+DELIMITER ;
+
 -- Asigna el viaje al primer conductor que acepte usando bloqueos pesimistas.
+DROP PROCEDURE IF EXISTS sp_aceptar_oferta;
+DELIMITER $$
+
 CREATE PROCEDURE sp_aceptar_oferta(
     IN p_id_viaje BIGINT,
     IN p_id_conductor BIGINT,
@@ -292,7 +345,9 @@ CREATE PROCEDURE sp_aceptar_oferta(
 )
 BEGIN
     DECLARE v_estado_actual VARCHAR(20);
-    
+    DECLARE v_oferta_pendiente INT DEFAULT 0;
+    DECLARE v_vehiculo_valido INT DEFAULT 0;
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -300,50 +355,85 @@ BEGIN
     END;
 
     START TRANSACTION;
-    
-    -- Bloqueamos la fila del viaje. Si dos conductores intentan aceptar al mismo tiempo, 
-    -- el segundo se queda en espera aquí hasta que el primero termine.
-    SELECT estado INTO v_estado_actual 
-    FROM viaje 
-    WHERE id_viaje = p_id_viaje 
+
+    SELECT estado
+    INTO v_estado_actual
+    FROM viaje
+    WHERE id_viaje = p_id_viaje
     FOR UPDATE;
-    
-    -- Solo continuamos si nadie más se nos ha adelantado
-    IF v_estado_actual = 'solicitado' THEN
-        
-        -- Asignamos el viaje al ganador
-        UPDATE viaje SET 
-            estado = 'aceptado', 
-            id_conductor = p_id_conductor, 
-            id_vehiculo = p_id_vehiculo,
-            fecha_aceptacion = CURRENT_TIMESTAMP
-        WHERE id_viaje = p_id_viaje;
-        
-        -- Marcamos su oferta como aceptada
-        UPDATE oferta SET 
-            estado_oferta = 'aceptada', 
-            fecha_respuesta = CURRENT_TIMESTAMP
-        WHERE id_viaje = p_id_viaje AND id_conductor = p_id_conductor;
-        
-        -- Cancelamos las ofertas del resto de conductores para este mismo viaje
-        UPDATE oferta SET estado_oferta = 'expirada'
-        WHERE id_viaje = p_id_viaje AND id_conductor <> p_id_conductor AND estado_oferta = 'pendiente';
-        
-        -- Marcamos al conductor ganador como ocupado
-        UPDATE conductor SET estado_conductor = 'en_viaje' WHERE id_usuario = p_id_conductor;
-        
-        SET p_resultado = 'OK';
-        COMMIT;
-    ELSE
-        SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
+
+    IF v_estado_actual <> 'solicitado' THEN
         ROLLBACK;
+        SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
+    ELSE
+        SELECT COUNT(*)
+        INTO v_oferta_pendiente
+        FROM oferta
+        WHERE id_viaje = p_id_viaje
+          AND id_conductor = p_id_conductor
+          AND estado_oferta = 'pendiente';
+
+        IF v_oferta_pendiente = 0 THEN
+            ROLLBACK;
+            SET p_resultado = 'ERROR_OFERTA_NO_VALIDA';
+        ELSE
+            SELECT COUNT(*)
+            INTO v_vehiculo_valido
+            FROM conductor_vehiculo cv
+            JOIN vehiculo v ON v.id_vehiculo = cv.id_vehiculo
+            WHERE cv.id_conductor = p_id_conductor
+              AND cv.id_vehiculo = p_id_vehiculo
+              AND cv.fecha_hasta IS NULL
+              AND v.activo = TRUE;
+
+            IF v_vehiculo_valido = 0 THEN
+                ROLLBACK;
+                SET p_resultado = 'ERROR_VEHICULO_NO_VALIDO';
+            ELSE
+                UPDATE viaje
+                SET
+                    estado = 'aceptado',
+                    id_conductor = p_id_conductor,
+                    id_vehiculo = p_id_vehiculo,
+                    fecha_aceptacion = CURRENT_TIMESTAMP
+                WHERE id_viaje = p_id_viaje;
+
+                UPDATE oferta
+                SET
+                    estado_oferta = 'aceptada',
+                    fecha_respuesta = CURRENT_TIMESTAMP
+                WHERE id_viaje = p_id_viaje
+                  AND id_conductor = p_id_conductor
+                  AND estado_oferta = 'pendiente';
+
+                UPDATE oferta
+                SET
+                    estado_oferta = 'expirada',
+                    fecha_respuesta = CURRENT_TIMESTAMP
+                WHERE id_viaje = p_id_viaje
+                  AND id_conductor <> p_id_conductor
+                  AND estado_oferta = 'pendiente';
+
+                UPDATE conductor
+                SET estado_conductor = 'en_viaje'
+                WHERE id_usuario = p_id_conductor;
+
+                COMMIT;
+                SET p_resultado = 'OK';
+            END IF;
+        END IF;
     END IF;
 END$$
 
+DELIMITER ;
+
 -- Cierra el viaje, libera al conductor y liquida el pago calculando la comisión.
+DROP PROCEDURE IF EXISTS sp_finalizar_viaje_y_pagar;
+DELIMITER $$
+
 CREATE PROCEDURE sp_finalizar_viaje_y_pagar(
     IN p_id_viaje BIGINT,
-    IN p_metodo_pago VARCHAR(50),
+    IN p_metodo_pago VARCHAR(20),
     OUT p_resultado VARCHAR(50)
 )
 BEGIN
@@ -352,7 +442,8 @@ BEGIN
     DECLARE v_importe_ofrecido DECIMAL(10,2);
     DECLARE v_importe_total DECIMAL(10,2);
     DECLARE v_comision DECIMAL(10,2);
-    
+    DECLARE v_pago_existente INT DEFAULT 0;
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -360,48 +451,100 @@ BEGIN
     END;
 
     START TRANSACTION;
-    
-    -- Bloqueamos el viaje antes de operar
-    SELECT estado, id_conductor INTO v_estado_actual, v_id_conductor 
-    FROM viaje WHERE id_viaje = p_id_viaje FOR UPDATE;
-    
-    IF v_estado_actual = 'en_curso' THEN
-        
-        -- Finalizamos el viaje y volvemos a poner al conductor disponible
-        UPDATE viaje SET estado = 'finalizado', fecha_fin = CURRENT_TIMESTAMP WHERE id_viaje = p_id_viaje;
-        UPDATE conductor SET estado_conductor = 'disponible' WHERE id_usuario = v_id_conductor;
-        
-        -- Recuperamos el importe base que se acordó
-        SELECT importe_ofrecido INTO v_importe_ofrecido 
-        FROM oferta WHERE id_viaje = p_id_viaje AND estado_oferta = 'aceptada' LIMIT 1;
-        
-        -- Aplicamos el 20% de margen de la plataforma
-        SET v_importe_total = v_importe_ofrecido * 1.20;
-        SET v_comision = v_importe_total - v_importe_ofrecido;
-        
-        -- Guardamos el recibo
-        INSERT INTO pago (id_viaje, importe_total, comision_company, importe_conductor, metodo_pago, estado_pago, fecha_pago)
-        VALUES (p_id_viaje, v_importe_total, v_comision, v_importe_ofrecido, p_metodo_pago, 'completado', CURRENT_TIMESTAMP);
-        
-        SET p_resultado = 'OK';
-        COMMIT;
-    ELSE
-        SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
+
+    SELECT estado, id_conductor
+    INTO v_estado_actual, v_id_conductor
+    FROM viaje
+    WHERE id_viaje = p_id_viaje
+    FOR UPDATE;
+
+    IF v_estado_actual <> 'en_curso' THEN
         ROLLBACK;
+        SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
+    ELSE
+        SELECT COUNT(*)
+        INTO v_pago_existente
+        FROM pago
+        WHERE id_viaje = p_id_viaje;
+
+        IF v_pago_existente > 0 THEN
+            ROLLBACK;
+            SET p_resultado = 'ERROR_PAGO_YA_EXISTE';
+        ELSE
+            SELECT importe_ofrecido
+            INTO v_importe_ofrecido
+            FROM oferta
+            WHERE id_viaje = p_id_viaje
+              AND estado_oferta = 'aceptada'
+            LIMIT 1;
+
+            IF v_importe_ofrecido IS NULL THEN
+                ROLLBACK;
+                SET p_resultado = 'ERROR_SIN_OFERTA_ACEPTADA';
+            ELSE
+                UPDATE viaje
+                SET
+                    estado = 'finalizado',
+                    fecha_fin = CURRENT_TIMESTAMP
+                WHERE id_viaje = p_id_viaje;
+
+                UPDATE conductor
+                SET estado_conductor = 'disponible'
+                WHERE id_usuario = v_id_conductor;
+
+                SET v_importe_total = ROUND(v_importe_ofrecido * 1.20, 2);
+                SET v_comision = ROUND(v_importe_total - v_importe_ofrecido, 2);
+
+                INSERT INTO pago (
+                    id_viaje,
+                    importe_total,
+                    comision_company,
+                    importe_conductor,
+                    metodo_pago,
+                    estado_pago,
+                    fecha_pago
+                )
+                VALUES (
+                    p_id_viaje,
+                    v_importe_total,
+                    v_comision,
+                    v_importe_ofrecido,
+                    p_metodo_pago,
+                    'completado',
+                    CURRENT_TIMESTAMP
+                );
+
+                COMMIT;
+                SET p_resultado = 'OK';
+            END IF;
+        END IF;
     END IF;
 END$$
 
+DELIMITER ;
+
 -- 7. TRIGGERS
 
--- Registra de forma automática cualquier cambio de estado en los viajes
+DROP TRIGGER IF EXISTS tr_audit_viaje_estado;
+DELIMITER $$
+
 CREATE TRIGGER tr_audit_viaje_estado
 AFTER UPDATE ON viaje
 FOR EACH ROW
 BEGIN
-    -- Comprobamos si el estado realmente ha cambiado usando <=> para evitar problemas con nulos
     IF NOT (OLD.estado <=> NEW.estado) THEN
-        INSERT INTO viaje_estado_log (id_viaje, estado_anterior, estado_nuevo, comentario)
-        VALUES (NEW.id_viaje, OLD.estado, NEW.estado, 'Actualizacion de estado');
+        INSERT INTO viaje_estado_log (
+            id_viaje,
+            estado_anterior,
+            estado_nuevo,
+            comentario
+        )
+        VALUES (
+            NEW.id_viaje,
+            OLD.estado,
+            NEW.estado,
+            'Actualizacion de estado'
+        );
     END IF;
 END$$
 
