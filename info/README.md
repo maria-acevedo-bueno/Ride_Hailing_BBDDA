@@ -68,26 +68,131 @@ El siguiente diagrama ilustra la arquitectura de datos, destacando las relacione
 
 ```mermaid
 erDiagram
+    COMPANY {
+        BIGINT id_company PK
+        VARCHAR nombre 
+        VARCHAR cif "UNIQUE"
+        DATETIME fecha_alta 
+        DATETIME fecha_modificacion 
+        BOOLEAN activo 
+    }
+    
+    USUARIO {
+        BIGINT id_usuario PK
+        VARCHAR nombre 
+        VARCHAR apellido1 
+        VARCHAR apellido2 
+        VARCHAR email "UNIQUE"
+        VARCHAR telefono "UNIQUE"
+        DATETIME fecha_alta 
+        DATETIME fecha_modificacion 
+        BOOLEAN activo 
+    }
+    
+    CONDUCTOR {
+        BIGINT id_usuario PK, FK
+        VARCHAR numero_licencia "UNIQUE"
+        ENUM estado_conductor 
+        DATETIME fecha_alta_conductor 
+        DATETIME fecha_modificacion_conductor 
+        BIGINT id_company FK
+    }
+    
+    RIDER {
+        BIGINT id_usuario PK, FK
+    }
+    
+    VEHICULO {
+        BIGINT id_vehiculo PK
+        BIGINT id_company FK
+        VARCHAR matricula "UNIQUE"
+        VARCHAR marca 
+        VARCHAR modelo 
+        VARCHAR color 
+        INT capacidad 
+        BOOLEAN activo 
+    }
+    
+    VIAJE {
+        BIGINT id_viaje PK
+        BIGINT id_rider FK
+        BIGINT id_conductor FK
+        BIGINT id_vehiculo FK
+        ENUM estado 
+        DATETIME fecha_solicitud 
+        DATETIME fecha_aceptacion 
+        DATETIME fecha_inicio 
+        DATETIME fecha_fin 
+        DECIMAL latitud_origen 
+        DECIMAL longitud_origen 
+        DECIMAL latitud_destino 
+        DECIMAL longitud_destino 
+        VARCHAR origen_direccion 
+        VARCHAR destino_direccion 
+        DECIMAL distancia_km 
+        ENUM cancelado_por 
+        VARCHAR motivo_cancelacion 
+    }
+    
+    OFERTA {
+        BIGINT id_oferta PK
+        BIGINT id_viaje FK
+        BIGINT id_conductor FK
+        DATETIME fecha_envio 
+        DATETIME fecha_respuesta 
+        ENUM estado_oferta 
+        DECIMAL importe_ofrecido 
+    }
+    
+    PAGO {
+        BIGINT id_pago PK
+        BIGINT id_viaje FK "UNIQUE"
+        DECIMAL importe_total 
+        DECIMAL comision_company 
+        DECIMAL importe_conductor 
+        ENUM metodo_pago 
+        ENUM estado_pago 
+        DATETIME fecha_pago 
+    }
+    
+    VALORACION {
+        BIGINT id_valoracion PK
+        BIGINT id_viaje FK
+        BIGINT id_usuario_valorador FK
+        BIGINT id_usuario_valorado FK
+        ENUM rol_valorado 
+        TINYINT puntuacion 
+        VARCHAR comentario 
+        DATETIME fecha_valoracion 
+    }
+    
+    VIAJE_ESTADO_LOG {
+        BIGINT id_historial PK
+        DATETIME fecha_cambio PK
+        BIGINT id_viaje FK
+        ENUM estado_anterior 
+        ENUM estado_nuevo 
+        VARCHAR comentario 
+    }
+
     COMPANY ||--o{ CONDUCTOR : "emplea"
     COMPANY ||--o{ VEHICULO : "gestiona"
-    
-    USUARIO ||--|| RIDER : "es_un"
     USUARIO ||--|| CONDUCTOR : "es_un"
+    USUARIO ||--|| RIDER : "es_un"
     
-    RIDER ||--o{ VIAJE : "solicita"
     CONDUCTOR ||--o{ VIAJE : "realiza"
+    RIDER ||--o{ VIAJE : "solicita"
     VEHICULO ||--o{ VIAJE : "utilizado_en"
     
     VIAJE ||--o{ OFERTA : "publica"
     CONDUCTOR ||--o{ OFERTA : "recibe"
     
     VIAJE ||--|| PAGO : "genera"
-    
+    VIAJE ||--o{ VIAJE_ESTADO_LOG : "audita_estado"
     VIAJE ||--o{ VALORACION : "evaluado_en"
     USUARIO ||--o{ VALORACION : "emite/recibe"
-    
-    VIAJE ||--o{ VIAJE_ESTADO_LOG : "audita_estado"
 ```
+
 ### 2.2 Descripción de tablas
 
 #### Tablas maestras y Companies
