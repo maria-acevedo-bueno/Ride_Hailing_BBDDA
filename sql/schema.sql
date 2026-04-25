@@ -428,9 +428,23 @@ CREATE PROCEDURE sp_aceptar_oferta(
 )
 BEGIN
     DECLARE v_estado_actual VARCHAR(20);
-    DECLARE v_id_oferta BIGINT;
+    DECLARE v_id_oferta BIGINT DEFAULT NULL;
     DECLARE v_vehiculo_valido INT DEFAULT 0;
+    DECLARE v_viaje_encontrado BOOLEAN DEFAULT TRUE;
+    DECLARE v_oferta_encontrada BOOLEAN DEFAULT TRUE;
 
+    -- Si un SELECT ... INTO no encuentra filas, marcamos el caso
+    -- como "no encontrado" en vez de dejar que el flujo sea ambiguo.
+    DECLARE CONTINUE HANDLER FOR NOT FOUND
+    BEGIN
+        IF v_estado_actual IS NULL THEN
+            SET v_viaje_encontrado = FALSE;
+        ELSE
+            SET v_oferta_encontrada = FALSE;
+        END IF;
+    END;
+
+    -- Si ocurre cualquier otro error SQL, se cancela toda la transacción.
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -439,17 +453,30 @@ BEGIN
 
     START TRANSACTION;
 
+    -- Paso 1:
+    -- bloquear el viaje. Así, si dos conductores intentan aceptar a la vez,
+    -- solo una sesión puede avanzar sobre este viaje.
     SELECT estado
     INTO v_estado_actual
     FROM viaje
     WHERE id_viaje = p_id_viaje
     FOR UPDATE;
 
-    IF v_estado_actual <> 'solicitado' THEN
+    -- Paso 2:
+    -- si el viaje no existe, no se puede aceptar ninguna oferta.
+    IF v_viaje_encontrado = FALSE THEN
+        ROLLBACK;
+        SET p_resultado = 'ERROR_VIAJE_NO_EXISTE';
+
+    -- Paso 3:
+    -- solo se puede aceptar una oferta de un viaje todavía solicitado.
+    ELSEIF v_estado_actual <> 'solicitado' THEN
         ROLLBACK;
         SET p_resultado = 'ERROR_ESTADO_NO_VALIDO';
 
     ELSE
+        -- Paso 4:
+        -- bloquear la oferta pendiente concreta de ese conductor.
         SELECT id_oferta
         INTO v_id_oferta
         FROM oferta
@@ -458,52 +485,75 @@ BEGIN
           AND estado_oferta = 'pendiente'
         FOR UPDATE;
 
-        SELECT COUNT(*)
-        INTO v_vehiculo_valido
-        FROM conductor_vehiculo cv
-        JOIN vehiculo v ON v.id_vehiculo = cv.id_vehiculo
-        JOIN conductor c ON c.id_usuario = cv.id_conductor
-        WHERE cv.id_conductor = p_id_conductor
-          AND cv.id_vehiculo = p_id_vehiculo
-          AND cv.fecha_hasta IS NULL
-          AND v.activo = TRUE
-          AND v.id_company = c.id_company
-        FOR UPDATE;
-
-        IF v_vehiculo_valido = 0 THEN
+        -- Paso 5:
+        -- si no hay oferta pendiente para ese conductor, abortar de forma controlada.
+        IF v_oferta_encontrada = FALSE OR v_id_oferta IS NULL THEN
             ROLLBACK;
-            SET p_resultado = 'ERROR_VEHICULO_NO_VALIDO';
+            SET p_resultado = 'ERROR_OFERTA_NO_PENDIENTE';
 
         ELSE
-            UPDATE viaje
-            SET
-                estado = 'aceptado',
-                id_conductor = p_id_conductor,
-                id_vehiculo = p_id_vehiculo,
-                fecha_aceptacion = CURRENT_TIMESTAMP
-            WHERE id_viaje = p_id_viaje
-              AND estado = 'solicitado';
+            -- Paso 6:
+            -- comprobar que el vehículo pertenece a ese conductor de forma vigente,
+            -- está activo y pertenece a la misma company que el conductor.
+            SELECT COUNT(*)
+            INTO v_vehiculo_valido
+            FROM conductor_vehiculo cv
+            JOIN vehiculo v
+                ON v.id_vehiculo = cv.id_vehiculo
+            JOIN conductor c
+                ON c.id_usuario = cv.id_conductor
+            WHERE cv.id_conductor = p_id_conductor
+              AND cv.id_vehiculo = p_id_vehiculo
+              AND cv.fecha_hasta IS NULL
+              AND v.activo = TRUE
+              AND v.id_company = c.id_company
+            FOR UPDATE;
 
-            UPDATE oferta
-            SET
-                estado_oferta = 'aceptada',
-                fecha_respuesta = CURRENT_TIMESTAMP
-            WHERE id_oferta = v_id_oferta;
+            -- Paso 7:
+            -- si el vehículo no es válido, no se acepta la oferta.
+            IF v_vehiculo_valido = 0 THEN
+                ROLLBACK;
+                SET p_resultado = 'ERROR_VEHICULO_NO_VALIDO';
 
-            UPDATE oferta
-            SET
-                estado_oferta = 'expirada',
-                fecha_respuesta = CURRENT_TIMESTAMP
-            WHERE id_viaje = p_id_viaje
-              AND id_oferta <> v_id_oferta
-              AND estado_oferta = 'pendiente';
+            ELSE
+                -- Paso 8:
+                -- asignar el viaje al conductor que ha aceptado primero.
+                UPDATE viaje
+                SET
+                    estado = 'aceptado',
+                    id_conductor = p_id_conductor,
+                    id_vehiculo = p_id_vehiculo,
+                    fecha_aceptacion = CURRENT_TIMESTAMP
+                WHERE id_viaje = p_id_viaje
+                  AND estado = 'solicitado';
 
-            UPDATE conductor
-            SET estado_conductor = 'en_viaje'
-            WHERE id_usuario = p_id_conductor;
+                -- Paso 9:
+                -- marcar su oferta como aceptada.
+                UPDATE oferta
+                SET
+                    estado_oferta = 'aceptada',
+                    fecha_respuesta = CURRENT_TIMESTAMP
+                WHERE id_oferta = v_id_oferta;
 
-            COMMIT;
-            SET p_resultado = 'OK';
+                -- Paso 10:
+                -- expirar el resto de ofertas pendientes del mismo viaje.
+                UPDATE oferta
+                SET
+                    estado_oferta = 'expirada',
+                    fecha_respuesta = CURRENT_TIMESTAMP
+                WHERE id_viaje = p_id_viaje
+                  AND id_oferta <> v_id_oferta
+                  AND estado_oferta = 'pendiente';
+
+                -- Paso 11:
+                -- el conductor deja de estar disponible.
+                UPDATE conductor
+                SET estado_conductor = 'en_viaje'
+                WHERE id_usuario = p_id_conductor;
+
+                COMMIT;
+                SET p_resultado = 'OK';
+            END IF;
         END IF;
     END IF;
 END$$

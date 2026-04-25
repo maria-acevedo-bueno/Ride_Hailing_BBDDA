@@ -18,15 +18,22 @@ USE ride_hailing;
 -- Método principal: backup lógico con mysqldump.
 -- Mejora posible: PITR si el binlog está activo.
 
+-- Este archivo está pensado para documentar el plan y dejar preparados
+-- los comandos que se ejecutarían desde la terminal.
+-- Los comandos de backup usan backup_user, creado en permissions.sql,
+-- para mantener la separación de cuentas por función.
+
 
 -- =========================================================
 -- 2. BACKUP LÓGICO DE ride_hailing
 -- =========================================================
 -- Ejecutar en terminal, no dentro de MySQL.
--- Incluye base de datos, procedimientos, triggers y eventos.
+-- Incluye la base de datos, procedimientos, triggers y eventos.
+-- Usa --single-transaction para obtener un snapshot consistente con InnoDB
+-- sin bloquear las tablas durante toda la copia.
 
 -- docker exec mysql8 mysqldump \
---   -uroot -prootpass \
+--   -ubackup_user -pBackup_Pass_2026! \
 --   --databases ride_hailing \
 --   --single-transaction \
 --   --routines --triggers --events \
@@ -37,28 +44,49 @@ USE ride_hailing;
 -- =========================================================
 -- 3. BACKUP COMPLETO DEL SERVIDOR
 -- =========================================================
--- Incluye también la base mysql, donde están usuarios y privilegios.
+-- Incluye todas las bases de datos.
+-- En un entorno real permite incluir también la base mysql,
+-- donde están usuarios y privilegios.
 -- Ejecutar en terminal.
 
 -- docker exec mysql8 mysqldump \
---   -uroot -prootpass \
+--   -ubackup_user -pBackup_Pass_2026! \
 --   --all-databases \
 --   --single-transaction \
 --   --routines --triggers --events \
 --   --set-gtid-purged=OFF \
 --   > backup_full_$(date +%Y%m%d).sql
 
+-- Nota:
+-- Si el usuario backup_user no tuviera permisos suficientes para exportar
+-- todas las bases de datos del servidor, el backup completo debería ejecutarse
+-- con una cuenta administrativa. Para la práctica, el backup principal es el
+-- del esquema ride_hailing.
+
 
 -- =========================================================
 -- 4. BACKUP DE TABLAS CONCRETAS
 -- =========================================================
--- Útil para exportar solo tablas principales.
+-- Útil para exportar solo las tablas principales de la práctica.
+-- Incluye conductor_vehiculo, porque es la tabla que relaciona conductores
+-- y vehículos y forma parte del modelo funcional.
 -- Ejecutar en terminal.
 
 -- docker exec mysql8 mysqldump \
---   -uroot -prootpass \
+--   -ubackup_user -pBackup_Pass_2026! \
 --   --single-transaction \
---   ride_hailing usuario rider conductor company vehiculo viaje oferta pago valoracion viaje_estado_log \
+--   ride_hailing \
+--   company \
+--   usuario \
+--   rider \
+--   conductor \
+--   vehiculo \
+--   conductor_vehiculo \
+--   viaje \
+--   oferta \
+--   pago \
+--   valoracion \
+--   viaje_estado_log \
 --   > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
 
 
@@ -66,12 +94,17 @@ USE ride_hailing;
 -- 5. RESTAURAR UN BACKUP
 -- =========================================================
 -- Ejecutar en terminal.
+-- Para restaurar se usa admin_user porque el restore recrea estructuras,
+-- inserta datos y puede necesitar permisos de escritura/DDL sobre el esquema.
 
 -- Opción con cat:
--- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+-- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026!
 
 -- Opción con redirección:
--- docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
+-- docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026! < backup_ride_hailing.sql
+
+-- Alternativa de emergencia en entorno de práctica:
+-- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
 
 
 -- =========================================================
@@ -119,6 +152,19 @@ FROM information_schema.KEY_COLUMN_USAGE
 WHERE TABLE_SCHEMA = 'ride_hailing'
   AND REFERENCED_TABLE_NAME IS NOT NULL;
 
+-- Comprobar procedimientos almacenados.
+SHOW PROCEDURE STATUS WHERE Db = 'ride_hailing';
+
+-- Comprobar triggers.
+SHOW TRIGGERS FROM ride_hailing;
+
+-- Comprobar vistas.
+SELECT
+    TABLE_NAME,
+    IS_UPDATABLE
+FROM information_schema.VIEWS
+WHERE TABLE_SCHEMA = 'ride_hailing';
+
 
 -- =========================================================
 -- 7. COMPROBAR SI SE PUEDE HACER PITR
@@ -139,7 +185,7 @@ SHOW BINARY LOGS;
 -- Ejecutar en terminal.
 
 -- 1) Restaurar el backup completo:
--- cat backup_ride_hailing_10_00.sql | docker exec -i mysql8 mysql -uroot -prootpass
+-- cat backup_ride_hailing_10_00.sql | docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026!
 
 -- 2) Extraer cambios hasta antes del error:
 -- docker exec mysql8 mysqlbinlog \
@@ -148,7 +194,7 @@ SHOW BINARY LOGS;
 --   /var/lib/mysql/binlog.000001 > cambios.sql
 
 -- 3) Aplicar cambios:
--- cat cambios.sql | docker exec -i mysql8 mysql -uroot -prootpass
+-- cat cambios.sql | docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026!
 
 
 -- =========================================================
@@ -196,22 +242,24 @@ SHOW BINARY LOGS;
 -- BACKUP_DIR="/backups/mysql"
 -- RETENTION_DAYS=7
 --
+-- mkdir -p "${BACKUP_DIR}"
+--
 -- docker exec mysql8 mysqldump \
---   -uroot -prootpass \
---   --all-databases \
+--   -ubackup_user -pBackup_Pass_2026! \
+--   --databases ride_hailing \
 --   --single-transaction \
 --   --routines --triggers --events \
 --   --set-gtid-purged=OFF \
---   | gzip > "${BACKUP_DIR}/backup_${FECHA}.sql.gz"
+--   | gzip > "${BACKUP_DIR}/backup_ride_hailing_${FECHA}.sql.gz"
 --
 -- if [ $? -eq 0 ]; then
---   echo "Backup creado: backup_${FECHA}.sql.gz"
+--   echo "Backup creado: backup_ride_hailing_${FECHA}.sql.gz"
 -- else
 --   echo "ERROR: Backup falló" >&2
 --   exit 1
 -- fi
 --
--- find ${BACKUP_DIR} -name "backup_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
+-- find "${BACKUP_DIR}" -name "backup_ride_hailing_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
 -- echo "Backups con más de ${RETENTION_DAYS} días eliminados"
 
 -- Programar backup diario a las 3:00:

@@ -59,9 +59,9 @@ INSERT INTO usuario (
     activo
 ) VALUES (
     'Pedro',
-    'Torres',
+    'Arias',
     'Luna',
-    'pedro.torres@ridehailing.test',
+    'pedro.arias@ridehailing.test',
     '600000099',
     TRUE
 );
@@ -113,7 +113,7 @@ ORDER BY id_oferta;
 
 CALL sp_aceptar_oferta(
     @id_viaje_generado,
-    6,
+    11,
     1,
     @resultado_aceptacion
 );
@@ -134,7 +134,7 @@ ORDER BY id_oferta;
 -- Ver el conductor tras la aceptación
 SELECT *
 FROM conductor
-WHERE id_usuario = 6;
+WHERE id_usuario = 11;
 
 -- Ver el log generado por el trigger
 SELECT *

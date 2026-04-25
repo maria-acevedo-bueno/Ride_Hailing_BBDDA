@@ -33,7 +33,7 @@ INSERT INTO usuario (
     ('Marta', 'Perez', 'Ruiz', 'marta.perez@ridehailing.test', '600000003', TRUE),        -- 3
     ('Diego', 'Navarro', 'Gil', 'diego.navarro@ridehailing.test', '600000004', TRUE),     -- 4
     ('Sara', 'Ortega', 'Mora', 'sara.ortega@ridehailing.test', '600000005', TRUE),        -- 5
-    ('Pedro', 'Torres', 'Luna', 'pedro.torres@ridehailing.test', '600000006', TRUE),      -- 6
+    ('Pedro', 'Arias', 'Luna', 'pedro.arias@ridehailing.test', '600000006', TRUE),      -- 6
     ('Lucia', 'Ramos', 'Iglesias', 'lucia.ramos@ridehailing.test', '600000007', TRUE),    -- 7
     ('Jorge', 'Mendez', 'Prieto', 'jorge.mendez@ridehailing.test', '600000008', TRUE),    -- 8
     ('Paula', 'Herrera', 'Sanz', 'paula.herrera@ridehailing.test', '600000009', TRUE),    -- 9
@@ -80,12 +80,12 @@ INSERT INTO conductor (
     (15, 'LIC-VLC-0001', 'disponible',   3),
     (16, 'LIC-VLC-0002', 'suspendido',   3),
     (17, 'LIC-BIL-0001', 'disponible',   4),
-    (18, 'LIC-BIL-0002', 'en_viaje',     4),
+    (18, 'LIC-BIL-0002', 'disponible',   4),
     (19, 'LIC-SEV-0001', 'disponible',   5),
     (20, 'LIC-SEV-0002', 'desconectado', 5),
     (21, 'LIC-MAD-0003', 'disponible',   1),
-    (22, 'LIC-BCN-0003', 'disponible',   2),
-    (23, 'LIC-VLC-0003', 'disponible',   3),
+    (22, 'LIC-BCN-0003', 'en_viaje',     2),
+    (23, 'LIC-VLC-0003', 'en_viaje',     3),
     (24, 'LIC-BIL-0003', 'disponible',   4),
     (25, 'LIC-SEV-0003', 'disponible',   5),
     (26, 'LIC-MAD-0004', 'desconectado', 1),

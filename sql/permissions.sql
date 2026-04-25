@@ -95,15 +95,20 @@ CREATE ROLE IF NOT EXISTS 'rol_readonly';
 GRANT ALL PRIVILEGES ON ride_hailing.* TO 'rol_admin';
 
 -- Rol de aplicación:
--- lectura mediante vistas operativas
+-- La aplicación NO actualiza directamente las tablas críticas.
+-- Las operaciones de negocio se canalizan mediante procedimientos almacenados.
+
+-- Lectura mediante vistas operativas.
 GRANT SELECT ON ride_hailing.v_conductores_disponibles TO 'rol_app';
 GRANT SELECT ON ride_hailing.v_viajes_operativos TO 'rol_app';
 GRANT SELECT ON ride_hailing.v_ofertas_operativas TO 'rol_app';
 
--- escritura solo donde tiene sentido funcional
+-- Escritura directa solo donde no rompe el flujo crítico de aceptación.
 GRANT INSERT ON ride_hailing.valoracion TO 'rol_app';
 
--- ejecución de lógica de negocio
+-- Ejecución de lógica de negocio.
+-- La aceptación de ofertas se hace por sp_aceptar_oferta,
+-- no con UPDATE directo sobre la tabla oferta.
 GRANT EXECUTE ON PROCEDURE ride_hailing.sp_solicitar_viaje TO 'rol_app';
 GRANT EXECUTE ON PROCEDURE ride_hailing.sp_aceptar_oferta TO 'rol_app';
 GRANT EXECUTE ON PROCEDURE ride_hailing.sp_iniciar_viaje TO 'rol_app';
