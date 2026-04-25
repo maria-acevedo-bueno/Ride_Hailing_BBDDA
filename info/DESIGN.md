@@ -390,25 +390,7 @@ La seguridad de la base de datos se ha organizado mediante roles de MySQL. En lu
 
 El objetivo principal es aplicar el principio de mínimos privilegios: cada usuario solo debe tener los permisos necesarios para cumplir su función.
 
-### 3.1 Vistas de seguridad y operación
-
-Antes de definir los roles, el script `permissions.sql` crea varias vistas. Estas vistas permiten controlar qué información puede consultar cada tipo de usuario, evitando dar acceso directo a todas las tablas.
-
-Las vistas creadas son:
-
-| Vista | Finalidad |
-| --- | --- |
-| `v_usuarios_anonimizados` | Permite consultar usuarios sin mostrar datos sensibles como `email` o `telefono`. |
-| `v_pagos_analitica` | Permite consultar información económica de los pagos para análisis. |
-| `v_viaje_estado_log_resumen` | Muestra el historial de cambios de estado de los viajes. |
-| `v_auditoria_operaciones` | Permite revisar operaciones auditadas sin acceder directamente a `audit_operacion`. |
-| `v_conductores_disponibles` | Muestra conductores activos y disponibles para la operativa de la aplicación. |
-| `v_viajes_operativos` | Muestra información operativa de los viajes. |
-| `v_ofertas_operativas` | Muestra información operativa de las ofertas. |
-
-El uso de vistas permite separar el acceso funcional del acceso directo a las tablas base. Así, por ejemplo, un analista puede consultar datos útiles para informes sin acceder a información personal completa de los usuarios.
-
-### 3.2 Roles definidos
+### 3.1 Roles definidos
 
 En el script se crean cinco roles principales:
 
@@ -543,12 +525,12 @@ Usuario asociado:
 'backup_user'@'%'
 ```
 
-### 3.3 Usuarios creados
+### 3.2 Usuarios creados
 
 El script crea un usuario para cada rol:
 
-| Usuario         | Rol asignado   | Finalidad                                        |
-| --------------- | -------------- | ------------------------------------------------ |
+| Usuario | Rol asignado | Finalidad |
+| --- | --- | --- |
 | `admin_user`    | `rol_admin`    | Administración completa del esquema.             |
 | `backend_user`  | `rol_app`      | Usuario utilizado por la aplicación backend.     |
 | `analyst_user`  | `rol_analista` | Consultas analíticas y métricas.                 |
@@ -569,7 +551,7 @@ SET DEFAULT ROLE 'rol_app' TO 'backend_user'@'%';
 
 Esto permite que el usuario tenga activo su rol automáticamente al iniciar sesión, sin tener que ejecutar manualmente `SET ROLE`.
 
-### 3.4 Justificación del diseño de seguridad
+### 3.3 Justificación del diseño de seguridad
 
 El diseño de permisos se basa en tres decisiones principales.
 
@@ -581,19 +563,919 @@ Tercero, se usan vistas para controlar la exposición de datos. Los usuarios de 
 
 En conjunto, esta configuración protege las tablas principales del sistema y obliga a que las operaciones críticas se realicen de forma controlada mediante procedimientos almacenados.
 
-
 ## 4. Vistas e Índices
 
-Explicar todas las vistas que se han creado, para qué sirven y quién tiene acceso a ellas.
+En el proyecto se han creado vistas para controlar el acceso a la información y simplificar algunas consultas frecuentes. Además, se han definido índices para mejorar el rendimiento de las búsquedas, joins y consultas operativas más habituales.
 
-Explicar los índices que se han creado, por qué se han creado y para qué sirven.
+Las vistas se definen en `permissions.sql`, mientras que los índices principales se crean en `schema.sql` junto con las tablas.
+
+### 4.1 Vistas creadas
+
+Las vistas permiten mostrar solo la información necesaria para cada tipo de usuario. De esta forma, no hace falta conceder acceso directo a todas las tablas base.
+
+| Vista | Finalidad | Roles con acceso funcional |
+| --- | --- | --- |
+| `v_usuarios_anonimizados` | Permite consultar usuarios sin exponer datos sensibles como `email` o `telefono`. | `rol_analista`, `rol_readonly` |
+| `v_pagos_analitica` | Muestra información económica de los pagos para análisis. | `rol_analista`, `rol_readonly` |
+| `v_viaje_estado_log_resumen` | Muestra el historial de cambios de estado de los viajes. | `rol_analista`, `rol_readonly` |
+| `v_auditoria_operaciones` | Permite revisar operaciones auditadas sin acceder directamente a la tabla `audit_operacion`. | `rol_analista`, `rol_readonly` |
+| `v_conductores_disponibles` | Muestra conductores activos y disponibles para recibir viajes. | `rol_app`, `rol_readonly` |
+| `v_viajes_operativos` | Muestra información operativa de los viajes. | `rol_app`, `rol_analista`, `rol_readonly` |
+| `v_ofertas_operativas` | Muestra información operativa de las ofertas. | `rol_app`, `rol_readonly` |
+
+El rol `rol_admin` tiene acceso completo al esquema, por lo que puede consultar todas las vistas y tablas. El rol `rol_backup` también tiene permisos de lectura y `SHOW VIEW`, pero su finalidad no es la consulta funcional, sino permitir copias de seguridad completas.
+
+#### `v_usuarios_anonimizados`
+
+Esta vista se crea a partir de la tabla `usuario`, pero no incluye los campos `email` ni `telefono`.
+
+Su objetivo es permitir análisis sobre usuarios sin exponer datos personales sensibles. Por eso se concede a roles de consulta, como `rol_analista` y `rol_readonly`.
+
+#### `v_pagos_analitica`
+
+Esta vista muestra los datos principales de la tabla `pago`: importes, comisión, método de pago, estado y fecha.
+
+Sirve para obtener métricas económicas sin necesidad de consultar directamente la tabla base. Es útil para informes de ingresos, comisiones y pagos completados.
+
+#### `v_viaje_estado_log_resumen`
+
+Esta vista resume el historial de cambios de estado de los viajes.
+
+Permite consultar transiciones como `solicitado → aceptado`, `aceptado → en_curso` o `en_curso → finalizado`, sin acceder directamente a la tabla `viaje_estado_log`.
+
+#### `v_auditoria_operaciones`
+
+Esta vista muestra la información de auditoría registrada en `audit_operacion`.
+
+Permite revisar qué operaciones se han realizado, sobre qué tabla, en qué momento y por qué usuario MySQL. Se usa para supervisión y trazabilidad.
+
+#### `v_conductores_disponibles`
+
+Esta vista combina `conductor` y `usuario` para mostrar únicamente conductores activos y con estado `disponible`.
+
+Es una vista operativa pensada para la aplicación, ya que permite localizar conductores que pueden recibir nuevas ofertas.
+
+#### `v_viajes_operativos`
+
+Esta vista muestra la información principal de los viajes: rider, conductor, vehículo, estado, fechas, direcciones y distancia.
+
+Sirve para consultas funcionales sobre el estado y evolución de los viajes, sin incluir todos los detalles técnicos de la tabla base.
+
+#### `v_ofertas_operativas`
+
+Esta vista muestra la información principal de las ofertas enviadas a conductores.
+
+Permite consultar el estado de cada oferta, el conductor asociado, el viaje correspondiente, la fecha de envío, la fecha de respuesta y el importe ofrecido.
+
+### 4.2 Índices creados
+
+Los índices se han definido para mejorar el rendimiento de las consultas más habituales. En general, se han creado sobre claves primarias, claves únicas, claves foráneas y columnas usadas frecuentemente en filtros, joins y ordenaciones.
+
+#### Índices de claves primarias y restricciones únicas
+
+Todas las tablas tienen una clave primaria (`PRIMARY KEY`) que identifica cada fila de forma única. Además, algunas columnas tienen restricciones `UNIQUE`, que también generan índices.
+
+| Tabla | Índice o restricción | Finalidad |
+| --- | --- | --- |
+| `company` | `PRIMARY KEY (id_company)` | Identificar cada compañía. |
+| `company` | `uk_company_cif UNIQUE (cif)` | Evitar compañías duplicadas por CIF. |
+| `usuario` | `PRIMARY KEY (id_usuario)` | Identificar cada usuario. |
+| `usuario` | `uk_usuario_email UNIQUE (email)` | Evitar emails duplicados. |
+| `usuario` | `uk_usuario_telefono UNIQUE (telefono)` | Evitar teléfonos duplicados. |
+| `rider` | `PRIMARY KEY (id_usuario)` | Relacionar cada rider con un usuario. |
+| `conductor` | `PRIMARY KEY (id_usuario)` | Relacionar cada conductor con un usuario. |
+| `conductor` | `uk_conductor_licencia UNIQUE (numero_licencia)` | Evitar licencias duplicadas. |
+| `vehiculo` | `PRIMARY KEY (id_vehiculo)` | Identificar cada vehículo. |
+| `vehiculo` | `uk_vehiculo_matricula UNIQUE (matricula)` | Evitar matrículas duplicadas. |
+| `conductor_vehiculo` | `PRIMARY KEY (id_conductor, id_vehiculo, fecha_desde)` | Evitar duplicar una misma asignación temporal. |
+| `viaje` | `PRIMARY KEY (id_viaje)` | Identificar cada viaje. |
+| `oferta` | `PRIMARY KEY (id_oferta)` | Identificar cada oferta. |
+| `oferta` | `uk_oferta_viaje_conductor UNIQUE (id_viaje, id_conductor)` | Evitar que un conductor reciba dos veces el mismo viaje. |
+| `oferta` | `uk_oferta_unica_aceptada_por_viaje UNIQUE (id_viaje_aceptado)` | Garantizar como máximo una oferta aceptada por viaje. |
+| `pago` | `PRIMARY KEY (id_pago)` | Identificar cada pago. |
+| `pago` | `uk_pago_viaje UNIQUE (id_viaje)` | Garantizar como máximo un pago por viaje. |
+| `valoracion` | `PRIMARY KEY (id_valoracion)` | Identificar cada valoración. |
+| `viaje_estado_log` | `PRIMARY KEY (id_historial)` | Identificar cada registro de historial. |
+| `audit_operacion` | `PRIMARY KEY (id_audit)` | Identificar cada registro de auditoría. |
+
+#### Índices operativos
+
+Además de las claves primarias y únicas, se han creado índices específicos para acelerar consultas frecuentes.
+
+| Tabla | Índice | Finalidad |
+| --- | --- | --- |
+| `conductor` | `idx_conductor_company (id_company)` | Buscar conductores por compañía. |
+| `conductor` | `idx_conductor_estado (estado_conductor)` | Localizar conductores por estado, especialmente disponibles. |
+| `vehiculo` | `idx_vehiculo_company (id_company)` | Buscar vehículos pertenecientes a una compañía. |
+| `conductor_vehiculo` | `idx_cv_conductor_vigente (id_conductor, fecha_hasta)` | Buscar asignaciones activas de un conductor. |
+| `conductor_vehiculo` | `idx_cv_vehiculo_vigente (id_vehiculo, fecha_hasta)` | Buscar asignaciones activas de un vehículo. |
+| `viaje` | `idx_viaje_estado_fecha (estado, fecha_solicitud)` | Consultar viajes por estado y fecha. |
+| `viaje` | `idx_viaje_conductor_fecha (id_conductor, fecha_solicitud)` | Consultar el historial de viajes de un conductor. |
+| `viaje` | `idx_viaje_rider_fecha (id_rider, fecha_solicitud)` | Consultar el historial de viajes de un rider. |
+| `oferta` | `idx_oferta_estado (estado_oferta)` | Buscar ofertas por estado. |
+| `oferta` | `idx_oferta_viaje_conductor_estado (id_viaje, id_conductor, estado_oferta)` | Localizar ofertas concretas dentro de un viaje. |
+| `oferta` | `idx_oferta_viaje_estado (id_viaje, estado_oferta)` | Buscar ofertas de un viaje según su estado. |
+| `oferta` | `idx_oferta_conductor_estado (id_conductor, estado_oferta)` | Consultar ofertas recibidas por un conductor según estado. |
+| `oferta` | `idx_oferta_fecha_envio (fecha_envio)` | Consultar ofertas por fecha de envío. |
+| `pago` | `idx_pago_estado_fecha (estado_pago, fecha_pago)` | Consultar pagos por estado y fecha. |
+| `valoracion` | `idx_valoracion_valorado_fecha (id_usuario_valorado, fecha_valoracion)` | Consultar valoraciones recibidas por un usuario en orden temporal. |
+| `viaje_estado_log` | `idx_log_viaje_fecha (id_viaje, fecha_cambio)` | Consultar el historial de estados de un viaje. |
+| `audit_operacion` | `idx_audit_tabla_fecha (tabla_afectada, fecha_operacion)` | Consultar auditoría por tabla y fecha. |
+| `audit_operacion` | `idx_audit_registro (tabla_afectada, id_registro)` | Consultar auditoría de un registro concreto. |
 
 ## 5. Procedimientos almacenados y triggers
 
-## 6. Backup
+En esta sección se documenta la lógica programada dentro de la base de datos. El proyecto utiliza procedimientos almacenados para controlar las operaciones críticas del ciclo de vida de un viaje, y triggers para registrar automáticamente cambios relevantes en tablas de auditoría.
 
-Explicar el RTO decidido, cómo están automatizados los backups y cómo hacemos PITR
+La idea principal es evitar que la aplicación haga modificaciones directas e independientes sobre tablas críticas como `viaje`, `oferta` o `pago`. En su lugar, esas operaciones se concentran en procedimientos almacenados que validan condiciones, usan transacciones y controlan errores.
 
-## 7. Monitorización
 
-Explicar el sistema de monitorización que hayamos usado.
+Todos los procedimientos principales utilizan transacciones:
+
+```sql
+START TRANSACTION;
+COMMIT;
+ROLLBACK;
+```
+
+También usan control de errores mediante:
+
+```sql
+DECLARE EXIT HANDLER FOR SQLEXCEPTION
+```
+
+De esta forma, si ocurre un error durante la operación, se ejecuta `ROLLBACK` y la base de datos no queda en un estado intermedio.
+
+### 5.1 Procedimientos almacenados
+
+#### `sp_solicitar_viaje`
+
+Este procedimiento se encarga de crear una nueva solicitud de viaje.
+
+Recibe los datos del rider, las coordenadas de origen y destino, las direcciones y la distancia estimada. Si todo es válido, inserta un nuevo viaje en estado `solicitado`.
+
+Antes de crear el viaje, comprueba que el rider existe y que el usuario está activo. Esta comprobación se hace bloqueando la fila correspondiente con:
+
+```sql
+FOR UPDATE
+```
+
+Esto evita cambios concurrentes sobre ese rider durante la creación del viaje.
+
+Después de insertar el viaje, el procedimiento calcula un importe base para las ofertas:
+
+```sql
+ROUND(p_distancia_km * 1.50, 2)
+```
+
+A continuación, genera ofertas para los conductores que cumplan todas estas condiciones:
+
+* El conductor está en estado `disponible`.
+* Tiene una asignación vigente en `conductor_vehiculo`.
+* El vehículo asignado está activo.
+* El vehículo pertenece a la misma `company` que el conductor.
+
+Si no se genera ninguna oferta, se hace `ROLLBACK` y el viaje no queda creado. Si se genera al menos una oferta, se confirma la operación con `COMMIT`.
+
+Resultado posible:
+
+| Resultado | Significado |
+| --- | --- |
+| `OK` | El viaje y sus ofertas se han creado correctamente. |
+| `ERROR_RIDER_NO_VALIDO` | El rider no existe o no está activo. |
+| `ERROR_SIN_CONDUCTORES_DISPONIBLES` | No hay conductores disponibles para generar ofertas. |
+| `ERROR_TRANSACCION` | Se ha producido un error SQL durante la operación. |
+
+#### `sp_aceptar_oferta`
+
+Este procedimiento permite que un conductor acepte una oferta.
+
+Es uno de los puntos más importantes del sistema, porque debe garantizar que un mismo viaje no pueda ser aceptado por dos conductores distintos.
+
+Primero bloquea el viaje con:
+
+```sql
+SELECT estado
+FROM viaje
+WHERE id_viaje = p_id_viaje
+FOR UPDATE;
+```
+
+Este bloqueo hace que, si dos sesiones intentan aceptar el mismo viaje al mismo tiempo, solo una pueda avanzar sobre la fila bloqueada.
+
+Después, el procedimiento comprueba que:
+
+* El viaje existe.
+* El viaje está en estado `solicitado`.
+* Existe una oferta pendiente para ese conductor.
+* El vehículo indicado está asignado al conductor.
+* La asignación del vehículo está vigente.
+* El vehículo está activo.
+* El conductor sigue estando disponible.
+* El conductor y el vehículo pertenecen a la misma `company`.
+
+Si todas las condiciones se cumplen, el procedimiento realiza estos cambios dentro de la misma transacción:
+
+1. Cambia el viaje a estado `aceptado`.
+2. Asigna el conductor al viaje.
+3. Asigna el vehículo al viaje.
+4. Marca la oferta del conductor como `aceptada`.
+5. Marca el resto de ofertas pendientes del viaje como `expirada`.
+6. Cambia el estado del conductor a `en_viaje`.
+7. Confirma la operación con `COMMIT`.
+
+Además del bloqueo con `FOR UPDATE`, la tabla `oferta` incluye una protección adicional: la columna generada `id_viaje_aceptado` con una restricción `UNIQUE`. Esto impide que existan dos ofertas aceptadas para el mismo viaje.
+
+Resultado posible:
+
+| Resultado | Significado |
+| --- | --- |
+| `OK`                        | La oferta se ha aceptado correctamente.            |
+| `ERROR_VIAJE_NO_EXISTE`     | El viaje indicado no existe.                       |
+| `ERROR_ESTADO_NO_VALIDO`    | El viaje no está en estado `solicitado`.           |
+| `ERROR_OFERTA_NO_PENDIENTE` | No existe una oferta pendiente para ese conductor. |
+| `ERROR_VEHICULO_NO_VALIDO`  | El vehículo no es válido para ese conductor.       |
+| `ERROR_TRANSACCION`         | Se ha producido un error SQL durante la operación. |
+
+#### `sp_iniciar_viaje`
+
+Este procedimiento cambia un viaje de estado `aceptado` a estado `en_curso`.
+
+Antes de hacer el cambio, bloquea el viaje con `FOR UPDATE` y comprueba que:
+
+* El viaje existe.
+* El viaje está en estado `aceptado`.
+* Tiene conductor asignado.
+* Tiene vehículo asignado.
+
+Si las validaciones son correctas, actualiza la tabla `viaje`:
+
+```sql
+estado = 'en_curso'
+fecha_inicio = CURRENT_TIMESTAMP
+```
+
+Este procedimiento evita que se puedan iniciar viajes que todavía no han sido aceptados o que no tienen una asignación completa.
+
+Resultado posible:
+
+| Resultado | Significado |
+| --- | --- |
+| `OK`                         | El viaje se ha iniciado correctamente.             |
+| `ERROR_VIAJE_NO_EXISTE`      | El viaje indicado no existe.                       |
+| `ERROR_ESTADO_NO_VALIDO`     | El viaje no está en estado `aceptado`.             |
+| `ERROR_VIAJE_SIN_ASIGNACION` | El viaje no tiene conductor o vehículo asignado.   |
+| `ERROR_TRANSACCION`          | Se ha producido un error SQL durante la operación. |
+
+#### `sp_finalizar_viaje_y_pagar`
+
+Este procedimiento cierra el ciclo principal del viaje.
+
+Su función es finalizar un viaje que está en curso, liberar al conductor y crear el pago correspondiente.
+
+Primero bloquea el viaje y comprueba que está en estado `en_curso`. Después valida que el método de pago recibido sea uno de los permitidos:
+
+```sql
+'tarjeta_credito', 'efectivo', 'wallet'
+```
+
+También comprueba que no exista ya un pago para ese viaje. Esta regla se refuerza en la tabla `pago` mediante la restricción:
+
+```sql
+UNIQUE (id_viaje)
+```
+
+Después, el procedimiento recupera la oferta aceptada del viaje, ya que el `importe_ofrecido` se usa como importe del conductor.
+
+Si todo es correcto, se ejecutan estos pasos:
+
+1. Cambiar el viaje a estado `finalizado`.
+2. Registrar `fecha_fin`.
+3. Cambiar el conductor a estado `disponible`.
+4. Calcular el importe total.
+5. Calcular la comisión de la compañía.
+6. Insertar el pago en la tabla `pago`.
+7. Confirmar la transacción.
+
+El cálculo económico aplicado es:
+
+```sql
+v_importe_total = ROUND(v_importe_ofrecido * 1.20, 2);
+v_comision = ROUND(v_importe_total - v_importe_ofrecido, 2);
+```
+
+Resultado posible:
+
+| Resultado | Significado |
+| --- | --- |
+| `OK`                          | El viaje se ha finalizado y pagado correctamente.  |
+| `ERROR_VIAJE_NO_EXISTE`       | El viaje indicado no existe.                       |
+| `ERROR_ESTADO_NO_VALIDO`      | El viaje no está en estado `en_curso`.             |
+| `ERROR_METODO_PAGO_NO_VALIDO` | El método de pago no está permitido.               |
+| `ERROR_PAGO_YA_EXISTE`        | El viaje ya tiene un pago asociado.                |
+| `ERROR_SIN_OFERTA_ACEPTADA`   | No existe oferta aceptada para calcular el pago.   |
+| `ERROR_TRANSACCION`           | Se ha producido un error SQL durante la operación. |
+
+### 5.2 Triggers
+
+Los triggers se usan para registrar automáticamente operaciones importantes. Así, la aplicación no tiene que insertar manualmente registros de auditoría cada vez que ocurre un cambio relevante.
+
+Todos los triggers definidos son `AFTER`, es decir, se ejecutan después de que la operación principal se haya realizado correctamente.
+
+#### `tr_audit_viaje_estado`
+
+Este trigger registra los cambios de estado de los viajes en la tabla `viaje_estado_log`.
+
+Se ejecuta después de un `UPDATE` sobre `viaje`, pero solo inserta un registro si el estado ha cambiado realmente.
+
+Para comprobarlo se usa el operador `<=>`, que compara de forma segura incluso cuando puede haber valores `NULL`:
+
+```sql
+IF NOT (OLD.estado <=> NEW.estado) THEN
+```
+
+Cuando detecta un cambio, guarda:
+
+* el identificador del viaje;
+* el estado anterior;
+* el estado nuevo;
+* la fecha del cambio;
+* un comentario.
+
+Este trigger permite reconstruir el historial completo de estados de cada viaje.
+
+#### `tr_audit_viaje_insert`
+
+Este trigger se ejecuta cuando se inserta un nuevo viaje.
+
+Añade un registro en `audit_operacion` indicando:
+
+* la tabla afectada;
+* el identificador del viaje creado;
+* la acción `INSERT`;
+* el usuario MySQL que realizó la operación;
+* una descripción del evento.
+
+Sirve para auditar la creación de nuevas solicitudes de viaje.
+
+#### `tr_audit_viaje_update`
+
+Este trigger se ejecuta cuando se actualiza un viaje.
+
+Registra la operación en `audit_operacion`, incluyendo el estado anterior y el estado nuevo del viaje.
+
+Complementa a `tr_audit_viaje_estado`: mientras `viaje_estado_log` guarda el historial funcional de estados, `audit_operacion` guarda la auditoría general de la operación realizada.
+
+#### `tr_audit_oferta_update`
+
+Este trigger se ejecuta cuando se actualiza una oferta.
+
+Registra en `audit_operacion` el cambio realizado sobre la oferta, especialmente los cambios de estado, por ejemplo:
+
+* `pendiente` a `aceptada`;
+* `pendiente` a `expirada`;
+* `pendiente` a `rechazada`.
+
+Es útil para revisar cómo se resolvieron las ofertas generadas para un viaje.
+
+#### `tr_audit_pago_insert`
+
+Este trigger se ejecuta cuando se inserta un pago.
+
+Registra en `audit_operacion` la creación del pago, indicando el viaje asociado y el importe total.
+
+Sirve para dejar trazabilidad de la liquidación económica de los viajes.
+
+#### Justificación del diseño
+
+El uso conjunto de procedimientos almacenados y triggers mejora la consistencia y la trazabilidad del sistema.
+
+Los procedimientos almacenados permiten que las operaciones críticas se ejecuten de forma controlada, transaccional y con validaciones previas. Esto es especialmente importante en procesos como la aceptación de ofertas, donde hay riesgo de concurrencia si dos conductores intentan aceptar el mismo viaje.
+
+Los triggers permiten registrar automáticamente eventos importantes sin depender de la aplicación. Gracias a ellos, los cambios de estado, inserciones de viajes, actualizaciones de ofertas y creación de pagos quedan reflejados en tablas de auditoría.
+
+En conjunto, esta solución permite:
+
+* centralizar la lógica crítica en la base de datos;
+* evitar actualizaciones manuales inconsistentes;
+* controlar el ciclo de vida del viaje;
+* prevenir dobles aceptaciones de ofertas;
+* asegurar que los pagos se generan una sola vez;
+* mantener auditoría automática de operaciones relevantes.
+
+## 6. Dashboard
+
+El archivo `dashboard.sql` contiene un conjunto de consultas pensadas para revisar el estado del sistema y obtener métricas relevantes directamente desde MySQL.
+
+El dashboard se ha planteado como un panel SQL ejecutable sobre la base de datos. Para ello se usan consultas `SELECT`, `SHOW STATUS`, `SHOW VARIABLES`, `information_schema`, `performance_schema` y `EXPLAIN`.
+
+### 6.1 Resumen general del sistema
+
+La primera parte del dashboard muestra un resumen global de las entidades principales de la base de datos.
+
+Se cuentan registros de las tablas principales:
+
+- `usuario`
+- `rider`
+- `conductor`
+- `company`
+- `vehiculo`
+- `viaje`
+- `oferta`
+- `pago`
+- `audit_operacion`
+
+Esta consulta sirve para comprobar rápidamente el volumen de datos cargado y verificar que la base de datos contiene información en las tablas principales.
+
+También se incluyen resúmenes de:
+
+- viajes por estado;
+- ofertas por estado.
+
+Esto permite ver, por ejemplo, cuántos viajes están `solicitado`, `aceptado`, `en_curso`, `finalizado` o `cancelado`, y cuántas ofertas están `pendiente`, `aceptada`, `rechazada` o `expirada`.
+
+### 6.2 Métricas de negocio
+
+El segundo bloque contiene consultas orientadas a analizar el funcionamiento de la plataforma.
+
+| Métrica | Finalidad |
+| --- | --- |
+| Viajes solicitados por hora | Ver en qué horas del día se solicitan más viajes. |
+| Ofertas aceptadas por hora | Analizar en qué franjas horarias se aceptan más ofertas. |
+| Tasa de aceptación por conductor | Medir qué porcentaje de ofertas acepta cada conductor. |
+| Tasa de aceptación por company | Comparar la aceptación de ofertas entre compañías. |
+| Kilometraje medio | Calcular la distancia media de los viajes finalizados. |
+| Duración media | Calcular la duración media de los viajes finalizados. |
+| Ingresos por conductor | Calcular ingresos, euros/km y euros/minuto por conductor. |
+| Ingresos por company | Calcular ingresos de la compañía según la comisión registrada. |
+| Valoración media por conductor | Obtener la puntuación media recibida por cada conductor. |
+
+La tasa de aceptación se calcula como:
+
+```text
+ofertas aceptadas / total de ofertas recibidas * 100
+```
+
+Esta métrica se calcula tanto por conductor como por company. Así se puede analizar el comportamiento individual de cada conductor y también el rendimiento agregado de cada empresa.
+
+Para las métricas económicas solo se consideran viajes finalizados y pagos completados. Esto evita mezclar datos de viajes aún abiertos, cancelados o sin pago.
+
+### 6.3 Métricas internas de MySQL
+
+El tercer bloque contiene consultas para revisar el estado técnico del servidor MySQL.
+
+Se incluyen métricas como:
+
+| Métrica | Consulta usada | Utilidad |
+| --- | --- | --- |
+| Tiempo activo del servidor | `SHOW STATUS LIKE 'Uptime';` | Indica cuánto tiempo lleva MySQL funcionando desde el último arranque. |
+| Conexiones activas | `SHOW STATUS LIKE 'Threads_connected';` | Muestra cuántas conexiones están abiertas en ese momento. |
+| Máximo de conexiones alcanzado | `SHOW STATUS LIKE 'Max_used_connections';` | Permite comparar el pico real de conexiones con el límite configurado. |
+| Límite de conexiones | `SHOW VARIABLES LIKE 'max_connections';` | Indica cuántas conexiones simultáneas permite MySQL como máximo. |
+| Conexiones rechazadas | `SHOW STATUS LIKE 'Connection_errors_max_connections';` | Permite detectar si alguna conexión ha sido rechazada por superar el límite. |
+| Total de queries ejecutadas | `SHOW STATUS LIKE 'Queries';` | Mide la actividad acumulada del servidor. |
+| Consultas recibidas desde clientes | `SHOW STATUS LIKE 'Questions';` | Cuenta las consultas enviadas por clientes al servidor. |
+| Lecturas | `SHOW STATUS LIKE 'Com_select';` | Muestra cuántas operaciones `SELECT` se han ejecutado. |
+| Inserciones | `SHOW STATUS LIKE 'Com_insert';` | Muestra cuántas operaciones `INSERT` se han ejecutado. |
+| Actualizaciones | `SHOW STATUS LIKE 'Com_update';` | Muestra cuántas operaciones `UPDATE` se han ejecutado. |
+| Borrados | `SHOW STATUS LIKE 'Com_delete';` | Muestra cuántas operaciones `DELETE` se han ejecutado. |
+| Queries lentas | `SHOW STATUS LIKE 'Slow_queries';` | Ayuda a detectar consultas que han superado el umbral de lentitud. |
+| Slow query log | `SHOW VARIABLES LIKE 'slow_query_log%';` | Comprueba si el registro de consultas lentas está activado y dónde se guarda. |
+| Umbral de query lenta | `SHOW VARIABLES LIKE 'long_query_time';` | Indica a partir de cuántos segundos una consulta se considera lenta. |
+
+Estas métricas permiten comprobar si el servidor está respondiendo correctamente y si existe algún síntoma básico de saturación o degradación.
+
+### 6.4 Métricas de InnoDB
+
+El dashboard también revisa métricas internas de InnoDB, especialmente relacionadas con el buffer pool.
+
+El buffer pool es la memoria que InnoDB utiliza para cachear datos e índices. Si funciona bien, muchas lecturas se resuelven desde memoria y no desde disco.
+
+Se consultan:
+
+* tamaño del buffer pool;
+* páginas totales;
+* páginas libres;
+* páginas sucias;
+* lecturas lógicas;
+* lecturas físicas.
+
+Además, se calcula el hit ratio del buffer pool:
+
+```text
+(read_requests - reads) / read_requests * 100
+```
+
+Esta métrica indica qué porcentaje de lecturas se atienden desde memoria. Un porcentaje alto es positivo, porque significa que MySQL está evitando muchas lecturas físicas de disco.
+
+### 6.5 Bloqueos, deadlocks y transacciones activas
+
+El dashboard incluye consultas para detectar posibles problemas de concurrencia.
+
+Se revisan:
+
+* esperas por locks de fila;
+* tiempo medio de espera por locks;
+* deadlocks detectados;
+* transacciones activas.
+
+Para ver transacciones abiertas se usa:
+
+```sql
+SELECT
+    trx_id,
+    trx_state,
+    trx_started,
+    trx_query
+FROM information_schema.INNODB_TRX
+ORDER BY trx_started ASC;
+```
+
+Esta consulta ayuda a detectar transacciones largas o bloqueadas. Es especialmente útil porque el proyecto usa procedimientos almacenados con transacciones y bloqueos `FOR UPDATE` en operaciones críticas.
+
+### 6.6 Tamaño de tablas e índices
+
+También se consulta `information_schema.tables` para obtener el tamaño ocupado por cada tabla del esquema `ride_hailing`.
+
+La consulta muestra:
+
+* nombre de la tabla;
+* tamaño de datos en MB;
+* tamaño de índices en MB.
+
+Esto permite identificar qué tablas ocupan más espacio y observar el crecimiento de la base de datos.
+
+### 6.7 Comprobación de índices con `EXPLAIN`
+
+El archivo incluye varias consultas con `EXPLAIN`.
+
+Estas consultas sirven para comprobar cómo MySQL ejecuta algunas consultas importantes del dashboard y si puede apoyarse en los índices definidos en `schema.sql`.
+
+Se analizan tres casos:
+
+| Consulta comprobada | Índices relacionados |
+| --- | --- |
+| Ofertas pendientes ordenadas por fecha | `idx_oferta_estado`, `idx_oferta_fecha_envio`                     |
+| Viajes por estado y fecha              | `idx_viaje_estado_fecha`                                          |
+| Ingresos por company                   | Índices de claves primarias, claves foráneas y filtros por estado |
+
+El objetivo de estas comprobaciones es justificar que el diseño de índices ayuda a mejorar las consultas frecuentes y evita, cuando sea posible, recorridos completos innecesarios de las tablas.
+
+### 6.8 Métricas de auditoría
+
+La última parte del dashboard revisa la trazabilidad del sistema.
+
+Se incluyen consultas sobre:
+
+| Consulta | Finalidad |
+| --- | --- |
+| Operaciones auditadas por tabla | Ver cuántas operaciones se han registrado por tabla y tipo de acción. |
+| Últimas operaciones auditadas   | Mostrar los últimos registros generados por los triggers.             |
+| Cambios de estado de viaje      | Resumir las transiciones almacenadas en `viaje_estado_log`.           |
+
+Estas consultas permiten comprobar que los triggers están registrando correctamente operaciones sobre viajes, ofertas y pagos.
+
+## 7. Backup
+
+El archivo `backup.sql` documenta el plan de copias de seguridad y recuperación de la base de datos `ride_hailing`.
+
+El objetivo es poder recuperar la base de datos ante una pérdida de datos, un borrado accidental o un fallo del entorno. Para ello se usa como método principal el backup lógico con `mysqldump`, ejecutado desde Docker.
+
+### 7.1 Objetivo del plan
+
+El plan diferencia los siguientes conceptos:
+
+| Concepto | Significado |
+| --- | --- |
+| Backup | Copia de seguridad de los datos y objetos de la base de datos. |
+| Restore | Proceso de restaurar una copia de seguridad. |
+| RPO | Pérdida máxima de datos aceptable. |
+| RTO | Tiempo máximo aceptable para recuperar el servicio. |
+| PITR | Recuperación a un punto concreto en el tiempo usando backup + binlog. |
+
+Para esta práctica se ha decidido:
+
+| Elemento | Decisión |
+| --- | --- |
+| Método principal | Backup lógico con `mysqldump`. |
+| RPO | 24 horas, usando backup diario. |
+| RTO | Restauración manual en entorno Docker. |
+| Mejora adicional | PITR si el binlog está activo y se conservan los binlogs necesarios. |
+
+El backup lógico se considera suficiente porque el proyecto tiene un tamaño manejable, es fácil de restaurar en Docker y genera un archivo SQL portable.
+
+### 7.2 Usuario de backup
+
+Los comandos de backup usan el usuario `backup_user`, creado en `permissions.sql`.
+
+Este usuario está separado del usuario de administración, del usuario de aplicación y de los usuarios de consulta. Con esto se mantiene el principio de mínimos privilegios: cada cuenta se usa para una función concreta.
+
+El rol asociado es `rol_backup`, que tiene permisos para leer datos y objetos necesarios para copias lógicas:
+
+```sql
+SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES
+```
+
+Además, tiene permisos globales útiles para backup y recuperación:
+
+```sql
+RELOAD, PROCESS, REPLICATION CLIENT
+```
+
+### 7.3 Backup lógico
+
+El backup principal es una copia lógica del esquema de la base de datos.
+
+El comando se ejecuta desde la terminal, no dentro del cliente MySQL:
+
+```bash
+docker exec mysql8 mysqldump \
+  -ubackup_user -pBackup_Pass_2026! \
+  --databases ride_hailing \
+  --single-transaction \
+  --routines --triggers --events \
+  --set-gtid-purged=OFF \
+  > backup_ride_hailing_$(date +%Y%m%d).sql
+```
+
+Las opciones principales son:
+
+| Opción | Finalidad |
+| --- | --- |
+| `--databases ride_hailing` | Incluye la base de datos `ride_hailing`.                                                    |
+| `--single-transaction`     | Genera una copia consistente en InnoDB sin bloquear las tablas durante toda la exportación. |
+| `--routines`               | Incluye procedimientos almacenados.                                                         |
+| `--triggers`               | Incluye triggers.                                                                           |
+| `--events`                 | Incluye eventos si existieran.                                                              |
+| `--set-gtid-purged=OFF`    | Evita incluir información GTID, ya que no se usa replicación GTID en la práctica.           |
+
+Esta copia es la principal para restaurar la base de datos del proyecto.
+
+### 7.4 Backup completo del servidor
+
+También se documenta un backup completo del servidor:
+
+```bash
+docker exec mysql8 mysqldump \
+  -ubackup_user -pBackup_Pass_2026! \
+  --all-databases \
+  --single-transaction \
+  --routines --triggers --events \
+  --set-gtid-purged=OFF \
+  > backup_full_$(date +%Y%m%d).sql
+```
+
+Este tipo de backup incluye todas las bases de datos del servidor. En un entorno real sería útil para incluir también la base `mysql`, donde se guardan usuarios y privilegios.
+
+En esta práctica, el backup principal es el de `ride_hailing`. Si `backup_user` no tuviera permisos suficientes para exportar todo el servidor, el backup completo debería ejecutarse con una cuenta administrativa.
+
+### 7.5 Backup de tablas concretas
+
+También se documenta una copia parcial de tablas concretas:
+
+```bash
+docker exec mysql8 mysqldump \
+  -ubackup_user -pBackup_Pass_2026! \
+  --single-transaction \
+  ride_hailing \
+  company \
+  usuario \
+  rider \
+  conductor \
+  vehiculo \
+  conductor_vehiculo \
+  viaje \
+  oferta \
+  pago \
+  valoracion \
+  viaje_estado_log \
+  audit_operacion \
+  > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
+```
+
+Este backup puede ser útil si solo se quieren exportar las tablas principales del modelo funcional y de auditoría.
+
+### 7.6 Restauración de un backup
+
+Para restaurar un backup se usa el cliente `mysql` dentro del contenedor.
+
+Opción con `cat`:
+
+```bash
+cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+Opción con redirección:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
+```
+
+Para restaurar se usa `root`, porque el dump puede contener sentencias como `CREATE DATABASE`, `USE`, `CREATE TABLE`, procedimientos y triggers. El usuario `admin_user` tiene permisos sobre `ride_hailing.*`, pero no necesariamente privilegios globales para reconstruir todo desde cero.
+
+### 7.7 Comprobaciones después del restore
+
+Después de restaurar la copia, el archivo incluye varias comprobaciones.
+
+Primero se comprueba que la base existe:
+
+```sql
+SHOW DATABASES;
+```
+
+Después se entra en la base:
+
+```sql
+USE ride_hailing;
+```
+
+Y se revisan las tablas:
+
+```sql
+SHOW TABLES;
+```
+
+También se hacen conteos básicos sobre las tablas principales para verificar que los datos se han restaurado:
+
+```sql
+SELECT 'company' AS tabla, COUNT(*) AS filas FROM company
+UNION ALL
+SELECT 'usuario', COUNT(*) FROM usuario
+UNION ALL
+SELECT 'rider', COUNT(*) FROM rider
+UNION ALL
+SELECT 'conductor', COUNT(*) FROM conductor
+UNION ALL
+SELECT 'vehiculo', COUNT(*) FROM vehiculo
+UNION ALL
+SELECT 'conductor_vehiculo', COUNT(*) FROM conductor_vehiculo
+UNION ALL
+SELECT 'viaje', COUNT(*) FROM viaje
+UNION ALL
+SELECT 'oferta', COUNT(*) FROM oferta
+UNION ALL
+SELECT 'pago', COUNT(*) FROM pago
+UNION ALL
+SELECT 'valoracion', COUNT(*) FROM valoracion
+UNION ALL
+SELECT 'viaje_estado_log', COUNT(*) FROM viaje_estado_log
+UNION ALL
+SELECT 'audit_operacion', COUNT(*) FROM audit_operacion;
+```
+
+Además, se comprueban:
+
+* claves foráneas declaradas;
+* procedimientos almacenados;
+* triggers;
+* vistas.
+
+Esto permite validar que no solo se han restaurado los datos, sino también los objetos de la base de datos.
+
+### 7.8 PITR
+
+También se documenta la posibilidad de hacer PITR, es decir, recuperación a un punto concreto en el tiempo.
+
+Para que PITR sea posible, la configuración de MySQL debe tener activo el binlog. En el archivo `mysql/conf.d/custom.cnf` se ha incluido:
+
+```ini
+log_bin=mysql-bin
+binlog_format=ROW
+sync_binlog=1
+binlog_expire_logs_seconds=604800
+```
+
+Esto significa:
+
+| Parámetro | Finalidad |
+| --- | --- |
+| `log_bin=mysql-bin`                 | Activa el binary log.                                         |
+| `binlog_format=ROW`                 | Registra los cambios fila a fila, adecuado para recuperación. |
+| `sync_binlog=1`                     | Fuerza mayor durabilidad del binlog.                          |
+| `binlog_expire_logs_seconds=604800` | Mantiene binlogs durante 7 días.                              |
+
+Para comprobar si PITR es viable, se usan:
+
+```sql
+SHOW VARIABLES LIKE 'log_bin';
+SHOW VARIABLES LIKE 'binlog_format';
+SHOW VARIABLES LIKE 'binlog_expire_logs_seconds';
+SHOW BINARY LOGS;
+```
+
+### 7.9 Ejemplo de recuperación PITR
+
+El caso planteado es recuperar la base de datos hasta antes de un borrado accidental.
+
+Primero se restaura el backup completo:
+
+```bash
+cat backup_ride_hailing_10_00.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+Después se extraen del binlog los cambios ocurridos desde el backup hasta justo antes del error:
+
+```bash
+docker exec mysql8 mysqlbinlog \
+  --start-datetime="2026-04-25 10:00:00" \
+  --stop-datetime="2026-04-25 10:29:59" \
+  /var/lib/mysql/mysql-bin.000001 > cambios.sql
+```
+
+Finalmente se aplican esos cambios:
+
+```bash
+cat cambios.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+También se documenta cómo buscar una operación concreta en el binlog, por ejemplo un `DELETE` accidental:
+
+```bash
+docker exec mysql8 mysqlbinlog \
+  --start-datetime="2026-04-25 10:25:00" \
+  --stop-datetime="2026-04-25 10:35:00" \
+  /var/lib/mysql/mysql-bin.000001 | grep -A5 -B5 "DELETE"
+```
+
+Además, se contempla la recuperación por posiciones:
+
+```bash
+docker exec mysql8 mysqlbinlog \
+  --start-position=154 \
+  --stop-position=12345 \
+  /var/lib/mysql/mysql-bin.000001 > cambios.sql
+```
+
+### 7.10 Automatización de backups
+
+El archivo documenta un script de backup con rotación, pensado para guardarse como `backup_mysql.sh`.
+
+El script:
+
+1. Genera una fecha para nombrar el backup.
+2. Crea el directorio de backups si no existe.
+3. Ejecuta `mysqldump`.
+4. Comprime la salida con `gzip`.
+5. Comprueba si el backup se ha creado correctamente.
+6. Borra backups antiguos con más de 7 días.
+
+Ejemplo:
+
+```bash
+#!/bin/bash
+FECHA=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backups/mysql"
+RETENTION_DAYS=7
+
+mkdir -p "${BACKUP_DIR}"
+
+docker exec mysql8 mysqldump \
+  -ubackup_user -pBackup_Pass_2026! \
+  --databases ride_hailing \
+  --single-transaction \
+  --routines --triggers --events \
+  --set-gtid-purged=OFF \
+  | gzip > "${BACKUP_DIR}/backup_ride_hailing_${FECHA}.sql.gz"
+
+if [ $? -eq 0 ]; then
+  echo "Backup creado: backup_ride_hailing_${FECHA}.sql.gz"
+else
+  echo "ERROR: Backup falló" >&2
+  exit 1
+fi
+
+find "${BACKUP_DIR}" -name "backup_ride_hailing_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
+echo "Backups con más de ${RETENTION_DAYS} días eliminados"
+```
+
+Para automatizarlo diariamente se usa `cron`:
+
+```bash
+crontab -e
+```
+
+Y se programa a las 3:00:
+
+```bash
+0 3 * * * /scripts/backup_mysql.sh >> /var/log/mysql_backup.log 2>&1
+```
+
+Con esto se cumple el RPO definido de 24 horas, ya que se genera una copia diaria.
+
+### 7.11 Snapshots consistentes
+
+Aunque el método principal del proyecto es `mysqldump`, también se documenta el patrón para realizar snapshots consistentes.
+
+Antes del snapshot se bloquearían brevemente las tablas:
+
+```sql
+FLUSH TABLES WITH READ LOCK;
+```
+
+Después se tomaría el snapshot desde la infraestructura correspondiente, y finalmente se liberaría el bloqueo:
+
+```sql
+UNLOCK TABLES;
+```
+
+Este método se incluye como referencia, pero no es el método principal de backup de la práctica.
