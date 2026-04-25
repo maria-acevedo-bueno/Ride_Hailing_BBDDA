@@ -94,17 +94,15 @@ USE ride_hailing;
 -- 5. RESTAURAR UN BACKUP
 -- =========================================================
 -- Ejecutar en terminal.
--- Para restaurar se usa admin_user porque el restore recrea estructuras,
--- inserta datos y puede necesitar permisos de escritura/DDL sobre el esquema.
+-- Para restaurar un dump que contiene CREATE DATABASE / USE / CREATE TABLE,
+-- en esta práctica es más coherente usar root, ya que admin_user tiene
+-- privilegios sobre ride_hailing.* pero no privilegios globales de creación.
 
 -- Opción con cat:
--- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026!
+-- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
 
 -- Opción con redirección:
--- docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026! < backup_ride_hailing.sql
-
--- Alternativa de emergencia en entorno de práctica:
--- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+-- docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
 
 
 -- =========================================================
