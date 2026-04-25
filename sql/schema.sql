@@ -242,7 +242,7 @@ CREATE TABLE IF NOT EXISTS oferta (
     CONSTRAINT uk_oferta_unica_aceptada_por_viaje UNIQUE (id_viaje_aceptado),
 
     CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje)
-        REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
+        REFERENCES viaje(id_viaje) ON UPDATE RESTRICT ON DELETE RESTRICT,
     CONSTRAINT fk_oferta_conductor FOREIGN KEY (id_conductor)
         REFERENCES conductor(id_usuario) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT ck_oferta_importe CHECK (importe_ofrecido >= 0),
