@@ -1,9 +1,9 @@
-global:
-  # Cada cuánto tiempo Prometheus va a ir a buscar métricas nuevas al exporter
-  scrape_interval: 15s
+# global:
+#   # Cada cuánto tiempo Prometheus va a ir a buscar métricas nuevas al exporter
+#   scrape_interval: 15s
 
-scrape_configs:
-  - job_name: "mysql"
-    static_configs:
-      # Apuntamos al contenedor del exporter definido en el compose
-      - targets: ["mysqld-exporter:9104"]
+# scrape_configs:
+#   - job_name: "mysql"
+#     static_configs:
+#       # Apuntamos al contenedor del exporter definido en el compose
+#       - targets: ["mysqld-exporter:9104"]
