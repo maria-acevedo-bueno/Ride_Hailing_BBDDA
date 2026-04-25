@@ -5,6 +5,8 @@ services:
     container_name: mysql8
     restart: unless-stopped
     ports:
+      # Puerto host:contenedor.
+      # Permite conectar desde la máquina local usando 127.0.0.1:3306.
       - "3306:3306"
     environment:
       # Credenciales iniciales para levantar la BD vacía.
@@ -20,7 +22,8 @@ services:
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     healthcheck:
       # Comprobamos que MySQL está realmente listo.
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      # Se usa la variable de entorno para evitar hardcodear la contraseña aquí.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10

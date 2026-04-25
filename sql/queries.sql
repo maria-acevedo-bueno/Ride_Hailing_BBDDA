@@ -12,6 +12,7 @@ USE ride_hailing;
 -- 5) el viaje se inicia
 -- 6) el viaje finaliza y se genera el pago
 -- 7) se revisa el log de estados generado por el trigger
+-- 8) se deja documentada una prueba manual de locks por concurrencia
 
 -- =========================================================
 -- 0. CONSULTAS DE COMPROBACION INICIAL
@@ -58,6 +59,13 @@ ORDER BY id_pago;
 SELECT *
 FROM viaje_estado_log
 ORDER BY id_historial;
+
+-- Ver auditoría general antes del flujo.
+-- Al cargar data.sql ya puede contener operaciones auditadas,
+-- porque los INSERT históricos de viajes disparan tr_audit_viaje_insert.
+SELECT *
+FROM audit_operacion
+ORDER BY id_audit;
 
 -- =========================================================
 -- 1. CREAR UN NUEVO USUARIO RIDER PARA EL FLUJO
@@ -130,12 +138,21 @@ FROM oferta
 WHERE id_viaje = @id_viaje_generado
 ORDER BY id_oferta;
 
+-- Ver la auditoría generada por la inserción del viaje.
+SELECT *
+FROM audit_operacion
+WHERE tabla_afectada = 'viaje'
+  AND id_registro = @id_viaje_generado
+ORDER BY id_audit;
+
 -- =========================================================
 -- 3. ACEPTAR UNA OFERTA
 -- =========================================================
 -- Se simula que el conductor 11 acepta el viaje usando el vehículo 1.
 -- Esta elección debe ser coherente con la carga de datos:
 -- conductor 11 debe estar disponible y tener asignado el vehículo 1.
+-- El procedimiento utiliza SELECT ... FOR UPDATE para bloquear el viaje
+-- y evitar que dos conductores acepten el mismo viaje de forma concurrente.
 
 CALL sp_aceptar_oferta(
     @id_viaje_generado,
@@ -159,6 +176,14 @@ FROM oferta
 WHERE id_viaje = @id_viaje_generado
 ORDER BY id_oferta;
 
+-- Comprobar que la restricción de una sola oferta aceptada por viaje se cumple.
+SELECT
+    id_viaje,
+    SUM(CASE WHEN estado_oferta = 'aceptada' THEN 1 ELSE 0 END) AS ofertas_aceptadas
+FROM oferta
+WHERE id_viaje = @id_viaje_generado
+GROUP BY id_viaje;
+
 -- Comprobar el nuevo estado del conductor.
 -- Debería estar marcado como en_viaje.
 SELECT *
@@ -170,6 +195,18 @@ SELECT *
 FROM viaje_estado_log
 WHERE id_viaje = @id_viaje_generado
 ORDER BY id_historial;
+
+-- Ver la auditoría general generada por cambios de viaje y ofertas.
+SELECT *
+FROM audit_operacion
+WHERE (tabla_afectada = 'viaje' AND id_registro = @id_viaje_generado)
+   OR (tabla_afectada = 'oferta'
+       AND id_registro IN (
+           SELECT id_oferta
+           FROM oferta
+           WHERE id_viaje = @id_viaje_generado
+       ))
+ORDER BY id_audit;
 
 -- =========================================================
 -- 4. INICIAR EL VIAJE
@@ -237,6 +274,12 @@ FROM viaje_estado_log
 WHERE id_viaje = @id_viaje_generado
 ORDER BY id_historial;
 
+-- Ver la auditoría general generada durante el flujo completo.
+SELECT *
+FROM audit_operacion
+ORDER BY id_audit DESC
+LIMIT 30;
+
 -- =========================================================
 -- 6. CONSULTAS FINALES DE RESUMEN
 -- =========================================================
@@ -297,3 +340,69 @@ SELECT
 FROM viaje_estado_log l
 WHERE l.id_viaje = @id_viaje_generado
 ORDER BY l.id_historial;
+
+-- Resumen cronológico de auditoría general.
+SELECT
+    a.id_audit,
+    a.tabla_afectada,
+    a.id_registro,
+    a.accion,
+    a.usuario_mysql,
+    a.fecha_operacion,
+    a.descripcion
+FROM audit_operacion a
+ORDER BY a.id_audit DESC
+LIMIT 30;
+
+-- =========================================================
+-- 7. PRUEBA EXPLICITA DE LOCK POR CONCURRENCIA
+-- =========================================================
+-- Esta sección se puede ejecutar manualmente en dos sesiones distintas.
+-- Demuestra que el primer conductor que acepta bloquea el viaje y evita
+-- que otro conductor acepte el mismo viaje al mismo tiempo.
+--
+-- IMPORTANTE:
+-- Las líneas siguientes están comentadas para que queries.sql pueda ejecutarse
+-- de principio a fin sin quedarse bloqueado. Para la defensa, se pueden copiar
+-- y ejecutar manualmente en dos terminales MySQL diferentes.
+
+-- SESION 1:
+-- START TRANSACTION;
+-- SELECT estado
+-- FROM viaje
+-- WHERE id_viaje = @id_viaje_generado
+-- FOR UPDATE;
+--
+-- Mantener esta transacción abierta unos segundos.
+-- Mientras tanto, ejecutar en SESION 2 la misma consulta.
+--
+-- Después:
+-- COMMIT;
+
+-- SESION 2:
+-- START TRANSACTION;
+-- SELECT estado
+-- FROM viaje
+-- WHERE id_viaje = @id_viaje_generado
+-- FOR UPDATE;
+--
+-- Esta consulta quedará esperando hasta que SESION 1 haga COMMIT o ROLLBACK.
+-- Después:
+-- COMMIT;
+
+-- Consulta para observar transacciones activas durante la prueba:
+SELECT
+    trx_id,
+    trx_state,
+    trx_started,
+    trx_query
+FROM information_schema.INNODB_TRX
+ORDER BY trx_started ASC;
+
+-- Consulta para observar esperas por locks, si existen:
+SELECT *
+FROM performance_schema.data_lock_waits;
+
+-- Consulta alternativa para diagnosticar el estado interno de InnoDB.
+-- En una defensa se puede ejecutar manualmente con:
+-- SHOW ENGINE INNODB STATUS\G

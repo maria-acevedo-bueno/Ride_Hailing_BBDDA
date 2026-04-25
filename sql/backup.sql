@@ -23,6 +23,14 @@ USE ride_hailing;
 -- Los comandos de backup usan backup_user, creado en permissions.sql,
 -- para mantener la separación de cuentas por función.
 
+-- La configuración de mysql/conf.d/custom.cnf activa:
+-- log_bin=mysql-bin
+-- binlog_format=ROW
+-- sync_binlog=1
+-- binlog_expire_logs_seconds=604800
+-- Esto permite plantear recuperación PITR durante 7 días si se conserva
+-- el backup completo y los binlogs necesarios.
+
 
 -- =========================================================
 -- 2. BACKUP LÓGICO DE ride_hailing
@@ -70,6 +78,7 @@ USE ride_hailing;
 -- Útil para exportar solo las tablas principales de la práctica.
 -- Incluye conductor_vehiculo, porque es la tabla que relaciona conductores
 -- y vehículos y forma parte del modelo funcional.
+-- Incluye audit_operacion, porque forma parte de la auditoría básica.
 -- Ejecutar en terminal.
 
 -- docker exec mysql8 mysqldump \
@@ -87,6 +96,7 @@ USE ride_hailing;
 --   pago \
 --   valoracion \
 --   viaje_estado_log \
+--   audit_operacion \
 --   > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
 
 
@@ -139,7 +149,9 @@ SELECT 'pago', COUNT(*) FROM pago
 UNION ALL
 SELECT 'valoracion', COUNT(*) FROM valoracion
 UNION ALL
-SELECT 'viaje_estado_log', COUNT(*) FROM viaje_estado_log;
+SELECT 'viaje_estado_log', COUNT(*) FROM viaje_estado_log
+UNION ALL
+SELECT 'audit_operacion', COUNT(*) FROM audit_operacion;
 
 -- Comprobar claves foráneas declaradas.
 SELECT
@@ -168,6 +180,7 @@ WHERE TABLE_SCHEMA = 'ride_hailing';
 -- 7. COMPROBAR SI SE PUEDE HACER PITR
 -- =========================================================
 -- PITR = restaurar un backup y aplicar binlogs hasta un momento concreto.
+-- Para que PITR sea viable, log_bin debe estar ON y binlog_format debería ser ROW.
 
 SHOW VARIABLES LIKE 'log_bin';
 SHOW VARIABLES LIKE 'binlog_format';
@@ -183,16 +196,17 @@ SHOW BINARY LOGS;
 -- Ejecutar en terminal.
 
 -- 1) Restaurar el backup completo:
--- cat backup_ride_hailing_10_00.sql | docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026!
+-- cat backup_ride_hailing_10_00.sql | docker exec -i mysql8 mysql -uroot -prootpass
 
--- 2) Extraer cambios hasta antes del error:
+-- 2) Extraer cambios hasta antes del error.
+-- El nombre del archivo coincide con log_bin=mysql-bin del custom.cnf:
 -- docker exec mysql8 mysqlbinlog \
 --   --start-datetime="2026-04-25 10:00:00" \
 --   --stop-datetime="2026-04-25 10:29:59" \
---   /var/lib/mysql/binlog.000001 > cambios.sql
+--   /var/lib/mysql/mysql-bin.000001 > cambios.sql
 
 -- 3) Aplicar cambios:
--- cat cambios.sql | docker exec -i mysql8 mysql -uadmin_user -pAdmin_Pass_2026!
+-- cat cambios.sql | docker exec -i mysql8 mysql -uroot -prootpass
 
 
 -- =========================================================
@@ -204,14 +218,14 @@ SHOW BINARY LOGS;
 -- docker exec mysql8 mysqlbinlog \
 --   --start-datetime="2026-04-25 10:25:00" \
 --   --stop-datetime="2026-04-25 10:35:00" \
---   /var/lib/mysql/binlog.000001 | grep -A5 -B5 "DELETE"
+--   /var/lib/mysql/mysql-bin.000001 | grep -A5 -B5 "DELETE"
 
 -- También se puede recuperar por posiciones:
 
 -- docker exec mysql8 mysqlbinlog \
 --   --start-position=154 \
 --   --stop-position=12345 \
---   /var/lib/mysql/binlog.000001 > cambios.sql
+--   /var/lib/mysql/mysql-bin.000001 > cambios.sql
 
 
 -- =========================================================
@@ -219,6 +233,8 @@ SHOW BINARY LOGS;
 -- =========================================================
 -- Los snapshots pueden ser inconsistentes si MySQL está escribiendo.
 -- Para coordinarlo, se puede bloquear brevemente la lectura de tablas.
+-- En esta práctica el método principal es mysqldump, pero se documenta
+-- el patrón visto en el temario.
 
 -- Ejecutar en MySQL antes del snapshot:
 -- FLUSH TABLES WITH READ LOCK;
@@ -263,3 +279,19 @@ SHOW BINARY LOGS;
 -- Programar backup diario a las 3:00:
 -- crontab -e
 -- 0 3 * * * /scripts/backup_mysql.sh >> /var/log/mysql_backup.log 2>&1
+
+
+-- =========================================================
+-- 12. JUSTIFICACIÓN RESUMIDA PARA LA DEFENSA
+-- =========================================================
+-- 1) Usamos backup lógico con mysqldump porque el proyecto es pequeño,
+--    portable y fácil de restaurar en Docker.
+-- 2) Usamos --single-transaction porque las tablas son InnoDB y así se obtiene
+--    una copia consistente sin bloquear escrituras durante toda la exportación.
+-- 3) Incluimos --routines --triggers --events porque la lógica de negocio,
+--    auditoría y automatización también forman parte del sistema.
+-- 4) Activamos binlog en formato ROW para poder plantear recuperación PITR.
+-- 5) Definimos RPO de 24 horas por backup diario y RTO de restauración manual
+--    en Docker, suficiente para una práctica universitaria.
+-- 6) Separamos el usuario backup_user de usuarios de aplicación y analítica
+--    siguiendo el principio de mínimos privilegios.

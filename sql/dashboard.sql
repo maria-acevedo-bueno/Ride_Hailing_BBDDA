@@ -26,7 +26,10 @@ SELECT 'ofertas', COUNT(*)
 FROM oferta
 UNION ALL
 SELECT 'pagos', COUNT(*)
-FROM pago;
+FROM pago
+UNION ALL
+SELECT 'operaciones_auditadas', COUNT(*)
+FROM audit_operacion;
 
 -- Resumen de viajes por estado.
 -- Permite ver cuántos viajes están solicitados, aceptados, en curso,
@@ -260,17 +263,26 @@ SHOW STATUS LIKE 'Innodb_buffer_pool_reads';
 
 -- 3.14. Hit ratio del buffer pool.
 -- (read_requests - reads) / read_requests * 100
+-- Se controla la división por cero para evitar errores en entornos recién arrancados.
 SELECT
     ROUND(
-        (1 - (
-            (SELECT VARIABLE_VALUE
-             FROM performance_schema.global_status
-             WHERE VARIABLE_NAME = 'Innodb_buffer_pool_reads')
-            /
-            (SELECT VARIABLE_VALUE
-             FROM performance_schema.global_status
-             WHERE VARIABLE_NAME = 'Innodb_buffer_pool_read_requests')
-        )) * 100,
+        CASE
+            WHEN (
+                SELECT CAST(VARIABLE_VALUE AS DECIMAL(20,4))
+                FROM performance_schema.global_status
+                WHERE VARIABLE_NAME = 'Innodb_buffer_pool_read_requests'
+            ) = 0 THEN 0
+            ELSE
+                (1 - (
+                    (SELECT CAST(VARIABLE_VALUE AS DECIMAL(20,4))
+                     FROM performance_schema.global_status
+                     WHERE VARIABLE_NAME = 'Innodb_buffer_pool_reads')
+                    /
+                    (SELECT CAST(VARIABLE_VALUE AS DECIMAL(20,4))
+                     FROM performance_schema.global_status
+                     WHERE VARIABLE_NAME = 'Innodb_buffer_pool_read_requests')
+                )) * 100
+        END,
         4
     ) AS buffer_pool_hit_ratio_pct;
 
@@ -346,3 +358,41 @@ JOIN company c
 WHERE v.estado = 'finalizado'
   AND p.estado_pago = 'completado'
 GROUP BY c.id_company, c.nombre;
+
+-- =========================================================
+-- 5. MÉTRICAS DE AUDITORÍA
+-- =========================================================
+
+-- Operaciones auditadas por tabla.
+-- Permite comprobar la actividad registrada automáticamente por triggers.
+SELECT
+    tabla_afectada,
+    accion,
+    COUNT(*) AS total_operaciones
+FROM audit_operacion
+GROUP BY tabla_afectada, accion
+ORDER BY tabla_afectada, accion;
+
+-- Últimas operaciones auditadas.
+-- Sirve para enseñar trazabilidad funcional durante la defensa.
+SELECT
+    id_audit,
+    tabla_afectada,
+    id_registro,
+    accion,
+    usuario_mysql,
+    fecha_operacion,
+    descripcion
+FROM audit_operacion
+ORDER BY fecha_operacion DESC
+LIMIT 20;
+
+-- Cambios de estado de viaje por tipo.
+-- Resume el histórico funcional de transiciones de viaje.
+SELECT
+    estado_anterior,
+    estado_nuevo,
+    COUNT(*) AS total_cambios
+FROM viaje_estado_log
+GROUP BY estado_anterior, estado_nuevo
+ORDER BY total_cambios DESC;

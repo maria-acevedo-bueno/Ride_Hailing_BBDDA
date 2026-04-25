@@ -6,7 +6,11 @@
 DROP DATABASE IF EXISTS ride_hailing;
 
 -- Se crea la base de datos principal del proyecto.
-CREATE DATABASE ride_hailing;
+-- utf8mb4 permite almacenar caracteres internacionales y emojis.
+-- utf8mb4_0900_ai_ci es la collation recomendada en MySQL 8.
+CREATE DATABASE ride_hailing
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
 
 -- A partir de aquí todas las sentencias se ejecutan sobre esta base.
 USE ride_hailing;
@@ -210,7 +214,8 @@ CREATE TABLE IF NOT EXISTS viaje (
 -- registra las ofertas enviadas a los conductores para un viaje.
 -- Para un mismo viaje se pueden generar varias ofertas, pero solo una termina aceptada.
 -- La restricción UNIQUE evita que el mismo conductor reciba dos veces el mismo viaje.
--- Los índices están pensados para consultas por estado, por viaje y por conductor.
+-- La columna generada id_viaje_aceptado refuerza a nivel de BD que solo pueda
+-- existir una oferta aceptada por viaje.
 CREATE TABLE IF NOT EXISTS oferta (
 
     id_oferta BIGINT NOT NULL AUTO_INCREMENT,
@@ -221,8 +226,21 @@ CREATE TABLE IF NOT EXISTS oferta (
     estado_oferta ENUM('pendiente', 'aceptada', 'rechazada', 'expirada') DEFAULT 'pendiente' NOT NULL,
     importe_ofrecido DECIMAL(10, 2) NOT NULL,
 
+    -- Columna generada para impedir más de una oferta aceptada por viaje.
+    -- En MySQL los UNIQUE permiten múltiples NULL, por eso solo se rellena
+    -- cuando la oferta está aceptada.
+    id_viaje_aceptado BIGINT GENERATED ALWAYS AS (
+        CASE
+            WHEN estado_oferta = 'aceptada' THEN id_viaje
+            ELSE NULL
+        END
+    ) STORED,
+
     PRIMARY KEY (id_oferta),
+
     CONSTRAINT uk_oferta_viaje_conductor UNIQUE (id_viaje, id_conductor),
+    CONSTRAINT uk_oferta_unica_aceptada_por_viaje UNIQUE (id_viaje_aceptado),
+
     CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje)
         REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_oferta_conductor FOREIGN KEY (id_conductor)
@@ -232,7 +250,8 @@ CREATE TABLE IF NOT EXISTS oferta (
     INDEX idx_oferta_estado (estado_oferta),
     INDEX idx_oferta_viaje_conductor_estado (id_viaje, id_conductor, estado_oferta),
     INDEX idx_oferta_viaje_estado (id_viaje, estado_oferta),
-    INDEX idx_oferta_conductor_estado (id_conductor, estado_oferta)
+    INDEX idx_oferta_conductor_estado (id_conductor, estado_oferta),
+    INDEX idx_oferta_fecha_envio (fecha_envio)
 
 ) ENGINE = InnoDB;
 
@@ -325,6 +344,27 @@ CREATE TABLE IF NOT EXISTS viaje_estado_log (
 
 ) ENGINE = InnoDB;
 
+-- Tabla audit_operacion:
+-- auditoría básica de operaciones críticas sobre viajes, ofertas y pagos.
+-- Complementa a viaje_estado_log porque no solo guarda transiciones de estado,
+-- sino también inserciones y actualizaciones relevantes para trazabilidad.
+CREATE TABLE IF NOT EXISTS audit_operacion (
+
+    id_audit BIGINT NOT NULL AUTO_INCREMENT,
+    tabla_afectada VARCHAR(50) NOT NULL,
+    id_registro BIGINT NOT NULL,
+    accion ENUM('INSERT', 'UPDATE', 'DELETE') NOT NULL,
+    usuario_mysql VARCHAR(100) NOT NULL,
+    fecha_operacion DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    descripcion VARCHAR(255) NULL,
+
+    PRIMARY KEY (id_audit),
+
+    INDEX idx_audit_tabla_fecha (tabla_afectada, fecha_operacion),
+    INDEX idx_audit_registro (tabla_afectada, id_registro)
+
+) ENGINE = InnoDB;
+
 -- =========================================================
 -- 6. PROCEDIMIENTOS ALMACENADOS
 -- =========================================================
@@ -352,13 +392,22 @@ BEGIN
     DECLARE v_importe_base DECIMAL(10,2);
     -- Número de ofertas finalmente generadas.
     DECLARE v_ofertas_generadas INT DEFAULT 0;
-    -- Controla si el rider existe y está activo.
-    DECLARE v_rider_valido INT DEFAULT 0;
+    -- Variable para bloquear la fila real del rider.
+    DECLARE v_id_rider_bloqueado BIGINT DEFAULT NULL;
+    -- Flag para controlar SELECT ... INTO sin resultado.
+    DECLARE v_not_found BOOLEAN DEFAULT FALSE;
+
+    -- Si un SELECT ... INTO no devuelve filas, se controla aquí.
+    DECLARE CONTINUE HANDLER FOR NOT FOUND
+    BEGIN
+        SET v_not_found = TRUE;
+    END;
 
     -- Cualquier error SQL cancela la transacción completa.
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
+        SET p_id_viaje = NULL;
         SET p_resultado = 'ERROR_TRANSACCION';
     END;
 
@@ -366,9 +415,11 @@ BEGIN
 
     -- Paso 1:
     -- Comprobar que el rider existe y está activo.
-    -- Se bloquea para mantener consistencia durante la operación.
-    SELECT COUNT(*)
-    INTO v_rider_valido
+    -- Se bloquea la fila real con FOR UPDATE para mantener consistencia.
+    SET v_not_found = FALSE;
+
+    SELECT r.id_usuario
+    INTO v_id_rider_bloqueado
     FROM rider r
     JOIN usuario u ON u.id_usuario = r.id_usuario
     WHERE r.id_usuario = p_id_rider
@@ -377,7 +428,7 @@ BEGIN
 
     -- Paso 2:
     -- Si no existe o no está activo, no se crea el viaje.
-    IF v_rider_valido = 0 THEN
+    IF v_not_found = TRUE OR v_id_rider_bloqueado IS NULL THEN
         ROLLBACK;
         SET p_id_viaje = NULL;
         SET p_resultado = 'ERROR_RIDER_NO_VALIDO';
@@ -414,7 +465,7 @@ BEGIN
 
         -- Paso 5:
         -- Calcular el importe base de la oferta.
-        SET v_importe_base = p_distancia_km * 1.50;
+        SET v_importe_base = ROUND(p_distancia_km * 1.50, 2);
 
         -- Paso 6:
         -- Generar ofertas para conductores disponibles que tengan:
@@ -470,6 +521,8 @@ DELIMITER $$
 -- Procedimiento sp_aceptar_oferta:
 -- asigna el viaje al primer conductor que acepta correctamente.
 -- Usa bloqueo pesimista sobre el viaje para evitar dobles aceptaciones.
+-- Además, la tabla oferta incluye una restricción UNIQUE que impide
+-- más de una oferta aceptada por viaje incluso si hubiera un error de aplicación.
 CREATE PROCEDURE sp_aceptar_oferta(
     IN p_id_viaje BIGINT,
     IN p_id_conductor BIGINT,
@@ -479,21 +532,18 @@ CREATE PROCEDURE sp_aceptar_oferta(
 BEGIN
     DECLARE v_estado_actual VARCHAR(20) DEFAULT NULL;
     DECLARE v_id_oferta BIGINT DEFAULT NULL;
-    DECLARE v_vehiculo_valido INT DEFAULT 0;
-    DECLARE v_viaje_encontrado BOOLEAN DEFAULT TRUE;
-    DECLARE v_oferta_encontrada BOOLEAN DEFAULT TRUE;
+    DECLARE v_id_vehiculo_bloqueado BIGINT DEFAULT NULL;
+    DECLARE v_not_found BOOLEAN DEFAULT FALSE;
 
     -- Si un SELECT ... INTO no devuelve filas, se controla aquí.
     DECLARE CONTINUE HANDLER FOR NOT FOUND
     BEGIN
-        IF v_estado_actual IS NULL THEN
-            SET v_viaje_encontrado = FALSE;
-        ELSE
-            SET v_oferta_encontrada = FALSE;
-        END IF;
+        SET v_not_found = TRUE;
     END;
 
     -- Cualquier error SQL provoca rollback completo.
+    -- Si se intenta aceptar una segunda oferta del mismo viaje, la restricción
+    -- uk_oferta_unica_aceptada_por_viaje también provocaría error y rollback.
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -504,6 +554,8 @@ BEGIN
 
     -- Paso 1:
     -- Bloquear el viaje. Solo una sesión podrá aceptarlo.
+    SET v_not_found = FALSE;
+
     SELECT estado
     INTO v_estado_actual
     FROM viaje
@@ -512,7 +564,7 @@ BEGIN
 
     -- Paso 2:
     -- Si el viaje no existe, terminar con error controlado.
-    IF v_viaje_encontrado = FALSE THEN
+    IF v_not_found = TRUE OR v_estado_actual IS NULL THEN
         ROLLBACK;
         SET p_resultado = 'ERROR_VIAJE_NO_EXISTE';
 
@@ -525,6 +577,9 @@ BEGIN
     ELSE
         -- Paso 4:
         -- Buscar y bloquear la oferta pendiente de ese conductor.
+        SET v_not_found = FALSE;
+        SET v_id_oferta = NULL;
+
         SELECT id_oferta
         INTO v_id_oferta
         FROM oferta
@@ -535,7 +590,7 @@ BEGIN
 
         -- Paso 5:
         -- Si no existe oferta pendiente, abortar.
-        IF v_oferta_encontrada = FALSE OR v_id_oferta IS NULL THEN
+        IF v_not_found = TRUE OR v_id_oferta IS NULL THEN
             ROLLBACK;
             SET p_resultado = 'ERROR_OFERTA_NO_PENDIENTE';
 
@@ -543,8 +598,12 @@ BEGIN
             -- Paso 6:
             -- Validar vehículo y asignación vigente.
             -- También se comprueba que el conductor siga disponible.
-            SELECT COUNT(*)
-            INTO v_vehiculo_valido
+            -- Se bloquean las filas implicadas para evitar cambios concurrentes.
+            SET v_not_found = FALSE;
+            SET v_id_vehiculo_bloqueado = NULL;
+
+            SELECT cv.id_vehiculo
+            INTO v_id_vehiculo_bloqueado
             FROM conductor_vehiculo cv
             JOIN vehiculo v
                 ON v.id_vehiculo = cv.id_vehiculo
@@ -560,7 +619,7 @@ BEGIN
 
             -- Paso 7:
             -- Si el vehículo no es válido, abortar.
-            IF v_vehiculo_valido = 0 THEN
+            IF v_not_found = TRUE OR v_id_vehiculo_bloqueado IS NULL THEN
                 ROLLBACK;
                 SET p_resultado = 'ERROR_VEHICULO_NO_VALIDO';
 
@@ -624,11 +683,11 @@ BEGIN
     DECLARE v_estado_actual VARCHAR(20) DEFAULT NULL;
     DECLARE v_id_conductor BIGINT DEFAULT NULL;
     DECLARE v_id_vehiculo BIGINT DEFAULT NULL;
-    DECLARE v_viaje_encontrado BOOLEAN DEFAULT TRUE;
+    DECLARE v_not_found BOOLEAN DEFAULT FALSE;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND
     BEGIN
-        SET v_viaje_encontrado = FALSE;
+        SET v_not_found = TRUE;
     END;
 
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -641,6 +700,8 @@ BEGIN
 
     -- Paso 1:
     -- Bloquear el viaje antes de cambiar su estado.
+    SET v_not_found = FALSE;
+
     SELECT estado, id_conductor, id_vehiculo
     INTO v_estado_actual, v_id_conductor, v_id_vehiculo
     FROM viaje
@@ -649,7 +710,7 @@ BEGIN
 
     -- Paso 2:
     -- Validar existencia.
-    IF v_viaje_encontrado = FALSE THEN
+    IF v_not_found = TRUE THEN
         ROLLBACK;
         SET p_resultado = 'ERROR_VIAJE_NO_EXISTE';
 
@@ -699,18 +760,15 @@ BEGIN
     DECLARE v_importe_ofrecido DECIMAL(10,2) DEFAULT NULL;
     DECLARE v_importe_total DECIMAL(10,2);
     DECLARE v_comision DECIMAL(10,2);
-    DECLARE v_pago_existente INT DEFAULT 0;
-    DECLARE v_metodo_pago_valido INT DEFAULT 0;
-    DECLARE v_viaje_encontrado BOOLEAN DEFAULT TRUE;
+    DECLARE v_id_pago_existente BIGINT DEFAULT NULL;
+    DECLARE v_pago_encontrado BOOLEAN DEFAULT FALSE;
     DECLARE v_oferta_encontrada BOOLEAN DEFAULT TRUE;
+    DECLARE v_not_found BOOLEAN DEFAULT FALSE;
+    DECLARE v_metodo_pago_valido INT DEFAULT 0;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND
     BEGIN
-        IF v_estado_actual IS NULL THEN
-            SET v_viaje_encontrado = FALSE;
-        ELSE
-            SET v_oferta_encontrada = FALSE;
-        END IF;
+        SET v_not_found = TRUE;
     END;
 
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -723,6 +781,8 @@ BEGIN
 
     -- Paso 1:
     -- Bloquear el viaje y recuperar estado y conductor.
+    SET v_not_found = FALSE;
+
     SELECT estado, id_conductor
     INTO v_estado_actual, v_id_conductor
     FROM viaje
@@ -731,7 +791,7 @@ BEGIN
 
     -- Paso 2:
     -- Validar existencia.
-    IF v_viaje_encontrado = FALSE THEN
+    IF v_not_found = TRUE THEN
         ROLLBACK;
         SET p_resultado = 'ERROR_VIAJE_NO_EXISTE';
 
@@ -754,20 +814,25 @@ BEGIN
 
         ELSE
             -- Paso 5:
-            -- Asegurar que no existe ya un pago para ese viaje.
+            -- Comprobar si ya existe un pago para ese viaje.
+            -- Aquí se usa SELECT COUNT porque no necesitamos bloquear una fila
+            -- inexistente. La protección definitiva contra duplicados la aporta
+            -- la restricción UNIQUE uk_pago_viaje.
             SELECT COUNT(*)
-            INTO v_pago_existente
+            INTO v_pago_encontrado
             FROM pago
-            WHERE id_viaje = p_id_viaje
-            FOR UPDATE;
+            WHERE id_viaje = p_id_viaje;
 
-            IF v_pago_existente > 0 THEN
+            IF v_pago_encontrado > 0 THEN
                 ROLLBACK;
                 SET p_resultado = 'ERROR_PAGO_YA_EXISTE';
 
             ELSE
                 -- Paso 6:
-                -- Recuperar la oferta aceptada, base del pago.
+                -- Recuperar y bloquear la oferta aceptada, base del pago.
+                SET v_not_found = FALSE;
+                SET v_importe_ofrecido = NULL;
+
                 SELECT importe_ofrecido
                 INTO v_importe_ofrecido
                 FROM oferta
@@ -776,9 +841,13 @@ BEGIN
                 LIMIT 1
                 FOR UPDATE;
 
+                IF v_not_found = TRUE OR v_importe_ofrecido IS NULL THEN
+                    SET v_oferta_encontrada = FALSE;
+                END IF;
+
                 -- Paso 7:
                 -- Si no hay oferta aceptada, no se puede liquidar.
-                IF v_oferta_encontrada = FALSE OR v_importe_ofrecido IS NULL THEN
+                IF v_oferta_encontrada = FALSE THEN
                     ROLLBACK;
                     SET p_resultado = 'ERROR_SIN_OFERTA_ACEPTADA';
 
@@ -868,6 +937,115 @@ BEGIN
             'Actualizacion de estado'
         );
     END IF;
+END$$
+
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS tr_audit_viaje_insert;
+DELIMITER $$
+
+-- Trigger tr_audit_viaje_insert:
+-- registra la creación de viajes en la auditoría general.
+CREATE TRIGGER tr_audit_viaje_insert
+AFTER INSERT ON viaje
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_operacion (
+        tabla_afectada,
+        id_registro,
+        accion,
+        usuario_mysql,
+        descripcion
+    )
+    VALUES (
+        'viaje',
+        NEW.id_viaje,
+        'INSERT',
+        USER(),
+        CONCAT('Viaje creado en estado ', NEW.estado)
+    );
+END$$
+
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS tr_audit_viaje_update;
+DELIMITER $$
+
+-- Trigger tr_audit_viaje_update:
+-- registra actualizaciones de viajes en la auditoría general.
+-- Complementa al trigger de historial de estados.
+CREATE TRIGGER tr_audit_viaje_update
+AFTER UPDATE ON viaje
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_operacion (
+        tabla_afectada,
+        id_registro,
+        accion,
+        usuario_mysql,
+        descripcion
+    )
+    VALUES (
+        'viaje',
+        NEW.id_viaje,
+        'UPDATE',
+        USER(),
+        CONCAT('Viaje actualizado. Estado anterior: ', OLD.estado, ', estado nuevo: ', NEW.estado)
+    );
+END$$
+
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS tr_audit_oferta_update;
+DELIMITER $$
+
+-- Trigger tr_audit_oferta_update:
+-- registra cambios en las ofertas, especialmente aceptaciones y expiraciones.
+CREATE TRIGGER tr_audit_oferta_update
+AFTER UPDATE ON oferta
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_operacion (
+        tabla_afectada,
+        id_registro,
+        accion,
+        usuario_mysql,
+        descripcion
+    )
+    VALUES (
+        'oferta',
+        NEW.id_oferta,
+        'UPDATE',
+        USER(),
+        CONCAT('Oferta actualizada. Estado anterior: ', OLD.estado_oferta, ', estado nuevo: ', NEW.estado_oferta)
+    );
+END$$
+
+DELIMITER ;
+
+DROP TRIGGER IF EXISTS tr_audit_pago_insert;
+DELIMITER $$
+
+-- Trigger tr_audit_pago_insert:
+-- registra la creación de pagos en la auditoría general.
+CREATE TRIGGER tr_audit_pago_insert
+AFTER INSERT ON pago
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_operacion (
+        tabla_afectada,
+        id_registro,
+        accion,
+        usuario_mysql,
+        descripcion
+    )
+    VALUES (
+        'pago',
+        NEW.id_pago,
+        'INSERT',
+        USER(),
+        CONCAT('Pago creado para viaje ', NEW.id_viaje, ' por importe ', NEW.importe_total)
+    );
 END$$
 
 DELIMITER ;

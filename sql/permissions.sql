@@ -38,6 +38,19 @@ SELECT
     comentario
 FROM viaje_estado_log;
 
+-- Vista de auditoría para analistas y usuarios de solo lectura.
+-- Permite revisar operaciones críticas sin dar acceso directo a la tabla audit_operacion.
+CREATE OR REPLACE VIEW v_auditoria_operaciones AS
+SELECT
+    id_audit,
+    tabla_afectada,
+    id_registro,
+    accion,
+    usuario_mysql,
+    fecha_operacion,
+    descripcion
+FROM audit_operacion;
+
 -- Vista operativa de conductores disponibles para la aplicación
 CREATE OR REPLACE VIEW v_conductores_disponibles AS
 SELECT
@@ -120,6 +133,7 @@ GRANT SELECT ON ride_hailing.v_usuarios_anonimizados TO 'rol_analista';
 GRANT SELECT ON ride_hailing.v_pagos_analitica TO 'rol_analista';
 GRANT SELECT ON ride_hailing.v_viaje_estado_log_resumen TO 'rol_analista';
 GRANT SELECT ON ride_hailing.v_viajes_operativos TO 'rol_analista';
+GRANT SELECT ON ride_hailing.v_auditoria_operaciones TO 'rol_analista';
 
 -- Rol de solo lectura:
 -- pensado para consultas funcionales sin permisos de escritura
@@ -129,6 +143,7 @@ GRANT SELECT ON ride_hailing.v_viajes_operativos TO 'rol_readonly';
 GRANT SELECT ON ride_hailing.v_ofertas_operativas TO 'rol_readonly';
 GRANT SELECT ON ride_hailing.v_pagos_analitica TO 'rol_readonly';
 GRANT SELECT ON ride_hailing.v_viaje_estado_log_resumen TO 'rol_readonly';
+GRANT SELECT ON ride_hailing.v_auditoria_operaciones TO 'rol_readonly';
 
 -- Rol de backup:
 -- lectura del esquema y objetos necesarios para copias lógicas
