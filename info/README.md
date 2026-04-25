@@ -1,85 +1,420 @@
 # CÓMO OPERAR SOBRE LA BASE DE DATOS
 
-## 1. Manejar la base de datos usando Docker Compose
+Este documento recoge las instrucciones para arrancar la base de datos, cargar los datos de prueba y ejecutar los scripts principales del proyecto.
 
-### 1.1. Comprobar que tenemos todo lo necesario para hacer uso de docker
+## 1. Requisitos previos
+
+Antes de empezar, comprobar que Docker y Docker Compose están instalados.
+
+En Bash:
 
 ```bash
 docker --version
 docker compose version
 ```
 
-En caso de tener tanto docker como docker compose instalados en el sistema, vamos con el siguiente paso.
+En PowerShell:
 
-### 1.2. Arrancar el servicio
+```powershell
+docker --version
+docker compose version
+```
+
+## 2. Arrancar la base de datos con Docker Compose
+
+Desde la carpeta raíz del proyecto, ejecutar:
+
+En Bash:
 
 ```bash
-# Inicializa el contenedor en segundo plano '-d'
 docker compose up -d
-# Muestra los contenedores en ejecución
+```
+
+En PowerShell:
+
+```powershell
+docker compose up -d
+```
+
+Comprobar que el contenedor está levantado:
+
+En Bash:
+
+```bash
 docker compose ps
-# Muestra logs
+```
+
+En PowerShell:
+
+```powershell
+docker compose ps
+```
+
+Ver los logs de MySQL:
+
+En Bash:
+
+```bash
 docker compose logs -f mysql
 ```
 
-Una vez iniciado, podemos comprobar si mysql está listo para ser usado 
+En PowerShell:
+
+```powershell
+docker compose logs -f mysql
+```
+
+Comprobar que MySQL está listo:
+
+En Bash:
 
 ```bash
 docker exec -it mysql8 mysqladmin ping -h 127.0.0.1 -uroot -prootpass
 ```
 
-Si como salida de este comando vemos `mysqld is alive` estamos preparados para empezar a trabajar con la base de datos.
+En PowerShell:
 
-## 1.3. Conectarse a la base de datos
+```powershell
+docker exec -it mysql8 mysqladmin ping -h 127.0.0.1 -uroot -prootpass
+```
 
-### Conectarse desde dentro del contenedor
+Si la salida es:
+
+```text
+mysqld is alive
+```
+
+la base de datos está preparada para usarse.
+
+## 3. Conectarse a MySQL
+
+### 3.1 Conectarse desde dentro del contenedor
+
+En Bash:
 
 ```bash
 docker exec -it mysql8 mysql -uroot -prootpass
 ```
 
-### Conectarse desde tu máquina
+En PowerShell:
+
+```powershell
+docker exec -it mysql8 mysql -uroot -prootpass
+```
+
+### 3.2 Conectarse desde la máquina local
+
+En Bash:
 
 ```bash
 mysql -h 127.0.0.1 -P 3306 -uroot -p
 ```
 
-## 1.4. Bajar el proyecto
+En PowerShell:
 
-En caso de que queramos bajar el contenedor, tenemos varias opciones
+```powershell
+mysql -h 127.0.0.1 -P 3306 -uroot -p
+```
 
-### Bajar el proyecto sin borrar datos
+Cuando pida contraseña:
+
+```text
+rootpass
+```
+
+## 4. Cargar la base de datos
+
+El orden recomendado para cargar los scripts es:
+
+```text
+1. schema.sql
+2. data.sql
+3. permissions.sql
+```
+
+> Cabe destacar que `schema.sql` elimina la base de datos anterior si existe y la vuelve a crear desde cero.
+
+### 4.1 Cargar el esquema
+
+En Bash:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < sql/schema.sql
+```
+
+En PowerShell:
+
+```powershell
+Get-Content -Raw .\sql\schema.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+### 4.2 Cargar los datos de prueba
+
+En Bash:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < sql/data.sql
+```
+
+En PowerShell:
+
+```powershell
+Get-Content -Raw .\sql\data.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+### 4.3 Cargar permisos, roles y vistas
+
+En Bash:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < sql/permissions.sql
+```
+
+En PowerShell:
+
+```powershell
+Get-Content -Raw .\sql\permissions.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+## 5. Comprobar que la carga ha funcionado
+
+Entrar en MySQL:
+
+En Bash:
+
+```bash
+docker exec -it mysql8 mysql -uroot -prootpass
+```
+
+En PowerShell:
+
+```powershell
+docker exec -it mysql8 mysql -uroot -prootpass
+```
+
+Dentro de MySQL:
+
+```sql
+USE ride_hailing;
+SHOW TABLES;
+```
+
+Comprobar conteos básicos:
+
+```sql
+SELECT 'company' AS tabla, COUNT(*) AS filas FROM company
+UNION ALL
+SELECT 'usuario', COUNT(*) FROM usuario
+UNION ALL
+SELECT 'rider', COUNT(*) FROM rider
+UNION ALL
+SELECT 'conductor', COUNT(*) FROM conductor
+UNION ALL
+SELECT 'vehiculo', COUNT(*) FROM vehiculo
+UNION ALL
+SELECT 'viaje', COUNT(*) FROM viaje
+UNION ALL
+SELECT 'oferta', COUNT(*) FROM oferta
+UNION ALL
+SELECT 'pago', COUNT(*) FROM pago;
+```
+
+Comprobar procedimientos almacenados:
+
+```sql
+SHOW PROCEDURE STATUS WHERE Db = 'ride_hailing';
+```
+
+Comprobar triggers:
+
+```sql
+SHOW TRIGGERS FROM ride_hailing;
+```
+
+Comprobar vistas:
+
+```sql
+SELECT TABLE_NAME
+FROM information_schema.VIEWS
+WHERE TABLE_SCHEMA = 'ride_hailing';
+```
+
+## 6. Ejecutar consultas operativas
+
+El archivo `queries.sql` contiene consultas de operación y comprobación.
+
+En Bash:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < sql/queries.sql
+```
+
+En PowerShell:
+
+```powershell
+Get-Content -Raw .\sql\queries.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+También se pueden ejecutar consultas manualmente entrando al cliente MySQL:
+
+En Bash:
+
+```bash
+docker exec -it mysql8 mysql -uroot -prootpass
+```
+
+En PowerShell:
+
+```powershell
+docker exec -it mysql8 mysql -uroot -prootpass
+```
+
+Y después:
+
+```sql
+USE ride_hailing;
+```
+
+## 7. Ejecutar el dashboard
+
+El archivo `dashboard.sql` contiene consultas para revisar métricas del sistema.
+
+En Bash:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < sql/dashboard.sql
+```
+
+En PowerShell:
+
+```powershell
+Get-Content -Raw .\sql\dashboard.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+Para guardar la salida en un archivo en Bash:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < sql/dashboard.sql > dashboard_output.txt
+```
+
+Para guardar la salida en PowerShell:
+
+```powershell
+Get-Content -Raw .\sql\dashboard.sql | docker exec -i mysql8 mysql -uroot -prootpass | Out-File dashboard_output.txt
+```
+
+## 8. Backup y restore
+
+El archivo `backup.sql` documenta los comandos de backup y recuperación.
+
+### 8.1 Crear backup de la base de datos
+
+En Bash:
+
+```bash
+docker exec mysql8 mysqldump \
+  -ubackup_user -pBackup_Pass_2026! \
+  --databases ride_hailing \
+  --single-transaction \
+  --routines --triggers --events \
+  --set-gtid-purged=OFF \
+  > backup_ride_hailing_$(date +%Y%m%d).sql
+```
+
+En PowerShell:
+
+```powershell
+docker exec mysql8 mysqldump `
+  -ubackup_user -pBackup_Pass_2026! `
+  --databases ride_hailing `
+  --single-transaction `
+  --routines --triggers --events `
+  --set-gtid-purged=OFF `
+  > backup_ride_hailing.sql
+```
+
+### 8.2 Restaurar backup
+
+En Bash:
+
+```bash
+cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+O también:
+
+```bash
+docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
+```
+
+En PowerShell:
+
+```powershell
+Get-Content -Raw .\backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
+
+## 9. Parar o borrar el entorno
+
+### 9.1 Parar el proyecto sin borrar datos
+
+En Bash:
 
 ```bash
 docker compose down
 ```
 
-### Borrar TODO (incluye datos)
+En PowerShell:
+
+```powershell
+docker compose down
+```
+
+Los datos se conservan porque están guardados en el volumen de Docker.
+
+### 9.2 Borrar contenedor y datos
+
+En Bash:
 
 ```bash
 docker compose down -v
 ```
 
-## 2. Tabla entidad-relación
+En PowerShell:
 
-## 3. Roles y permisos
+```powershell
+docker compose down -v
+```
 
-Explicar usuarios y roles, por qué se han creado y las funciones que hacen cada uno de ellos.
+Esto elimina también el volumen de datos. Después será necesario volver a cargar:
 
-## 4. Vistas e Índices
+```text
+schema.sql
+data.sql
+permissions.sql
+```
 
-Explicar todas las vistas que se han creado, para qué sirven y quién tiene acceso a ellas.
+## 10. Iniciar la práctica desde cero
 
-Explicar los índices que se han creado, por qué se han creado y para qué sirven.
+En Bash:
 
-## 5. Procedimientos almacenados y triggers
+```bash
+docker compose down -v
+docker compose up -d
+docker exec -i mysql8 mysql -uroot -prootpass < sql/schema.sql
+docker exec -i mysql8 mysql -uroot -prootpass < sql/data.sql
+docker exec -i mysql8 mysql -uroot -prootpass < sql/permissions.sql
+docker exec -i mysql8 mysql -uroot -prootpass < sql/queries.sql
+docker exec -i mysql8 mysql -uroot -prootpass < sql/dashboard.sql
+```
 
-Qué procedimientos almacenados y triggers tenemos, por qué los hemos creado y para qué sirven.
+En PowerShell:
 
-## 6. Backup
-
-Explicar el RTO decidido, cómo están automatizados los backups y cómo hacemos PITR
-
-## 7. Monitorización
-
-Explicar el sistema de monitorización que hayamos usado.
+```powershell
+docker compose down -v
+docker compose up -d
+Get-Content -Raw .\sql\schema.sql | docker exec -i mysql8 mysql -uroot -prootpass
+Get-Content -Raw .\sql\data.sql | docker exec -i mysql8 mysql -uroot -prootpass
+Get-Content -Raw .\sql\permissions.sql | docker exec -i mysql8 mysql -uroot -prootpass
+Get-Content -Raw .\sql\queries.sql | docker exec -i mysql8 mysql -uroot -prootpass
+Get-Content -Raw .\sql\dashboard.sql | docker exec -i mysql8 mysql -uroot -prootpass
+```
