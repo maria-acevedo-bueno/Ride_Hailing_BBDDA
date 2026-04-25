@@ -11,11 +11,11 @@ INSERT INTO company (
     cif,
     activo
 ) VALUES
-    ('MoveFast Madrid', 'A12345678', TRUE),
-    ('UrbanTrips BCN', 'B23456789', TRUE),
-    ('CostaRide VLC', 'C34567890', TRUE),
-    ('NorteMov Bilbao', 'D45678901', TRUE),
-    ('SevillaGo', 'E56789012', TRUE);
+    ('Cabify', 'A12345678', TRUE),
+    ('Uber', 'B23456789', TRUE),
+    ('Bolt', 'C34567890', TRUE),
+    ('Lyft', 'D45678901', TRUE),
+    ('Free Now', 'E56789012', TRUE);
 
 -- 2. USUARIOS
 -- Primero se insertan riders y después conductores para controlar mejor los ids.
