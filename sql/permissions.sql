@@ -288,7 +288,6 @@ GRANT SELECT ON ride_hailing.v_readonly_vehiculos TO 'rol_readonly';
 GRANT SELECT ON ride_hailing.v_readonly_viajes_resumen TO 'rol_readonly';
 GRANT SELECT ON ride_hailing.v_readonly_viajes_por_estado TO 'rol_readonly';
 
-
 -- El rol de backup tiene permisos para exportar datos ya que los necesita para realizar copias de seguridad
 GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES
 ON ride_hailing.* TO 'rol_backup';
@@ -298,23 +297,23 @@ ON *.* TO 'rol_backup';
 
 -- GESTION DE USUARIOS
 
-CREATE USER IF NOT EXISTS 'admin_user'@'%' IDENTIFIED BY 'Admin_Pass_2026!';
+CREATE USER IF NOT EXISTS 'admin_user'@'%' IDENTIFIED BY 'Admin1234';
 GRANT 'rol_admin' TO 'admin_user'@'%';
 SET DEFAULT ROLE 'rol_admin' TO 'admin_user'@'%';
 
-CREATE USER IF NOT EXISTS 'backend_user'@'%' IDENTIFIED BY 'App_Pass_2026!';
+CREATE USER IF NOT EXISTS 'backend_user'@'%' IDENTIFIED BY 'App1234';
 GRANT 'rol_app' TO 'backend_user'@'%';
 SET DEFAULT ROLE 'rol_app' TO 'backend_user'@'%';
 
-CREATE USER IF NOT EXISTS 'analyst_user'@'%' IDENTIFIED BY 'Analyst_Pass_2026!';
+CREATE USER IF NOT EXISTS 'analyst_user'@'%' IDENTIFIED BY 'Analyst1234';
 GRANT 'rol_analista' TO 'analyst_user'@'%';
 SET DEFAULT ROLE 'rol_analista' TO 'analyst_user'@'%';
 
-CREATE USER IF NOT EXISTS 'readonly_user'@'%' IDENTIFIED BY 'Readonly_Pass_2026!';
+CREATE USER IF NOT EXISTS 'readonly_user'@'%' IDENTIFIED BY 'Readonly1234';
 GRANT 'rol_readonly' TO 'readonly_user'@'%';
 SET DEFAULT ROLE 'rol_readonly' TO 'readonly_user'@'%';
 
-CREATE USER IF NOT EXISTS 'backup_user'@'%' IDENTIFIED BY 'Backup_Pass_2026!';
+CREATE USER IF NOT EXISTS 'backup_user'@'%' IDENTIFIED BY 'Backup1234';
 GRANT 'rol_backup' TO 'backup_user'@'%';
 SET DEFAULT ROLE 'rol_backup' TO 'backup_user'@'%';
 
