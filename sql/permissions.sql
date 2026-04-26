@@ -124,6 +124,90 @@ JOIN usuario u
 JOIN company co
     ON co.id_company = c.id_company;
 
+CREATE VIEW v_analyst_tasa_aceptacion_conductor AS
+SELECT
+    o.id_conductor,
+    u.nombre AS conductor_nombre,
+    COUNT(o.id_oferta) AS total_ofertas,
+    SUM(CASE WHEN o.estado_oferta = 'aceptada' THEN 1 ELSE 0 END) AS ofertas_aceptadas,
+    ROUND(
+        SUM(CASE WHEN o.estado_oferta = 'aceptada' THEN 1 ELSE 0 END) * 100.0
+        / NULLIF(COUNT(o.id_oferta), 0),
+        2
+    ) AS tasa_aceptacion_pct
+FROM oferta o
+JOIN usuario u
+    ON u.id_usuario = o.id_conductor
+GROUP BY
+    o.id_conductor,
+    u.nombre;
+
+CREATE VIEW v_analyst_tasa_aceptacion_company AS
+SELECT
+    c.id_company,
+    co.nombre AS company,
+    COUNT(o.id_oferta) AS total_ofertas,
+    SUM(CASE WHEN o.estado_oferta = 'aceptada' THEN 1 ELSE 0 END) AS ofertas_aceptadas,
+    ROUND(
+        SUM(CASE WHEN o.estado_oferta = 'aceptada' THEN 1 ELSE 0 END) * 100.0
+        / NULLIF(COUNT(o.id_oferta), 0),
+        2
+    ) AS tasa_aceptacion_pct
+FROM oferta o
+JOIN conductor c
+    ON c.id_usuario = o.id_conductor
+JOIN company co
+    ON co.id_company = c.id_company
+GROUP BY
+    c.id_company,
+    co.nombre;
+
+CREATE VIEW v_analyst_ingresos_conductor AS
+SELECT
+    v.id_conductor,
+    u.nombre AS conductor_nombre,
+    COUNT(p.id_pago) AS total_pagos,
+    SUM(p.importe_total) AS ingresos_totales,
+    SUM(p.importe_conductor) AS ingresos_conductor,
+    SUM(v.distancia_km) AS km_totales,
+    ROUND(
+        SUM(p.importe_total) / NULLIF(SUM(v.distancia_km), 0),
+        2
+    ) AS euros_por_km
+FROM pago p
+JOIN viaje v
+    ON v.id_viaje = p.id_viaje
+JOIN usuario u
+    ON u.id_usuario = v.id_conductor
+WHERE p.estado_pago = 'pagado'
+GROUP BY
+    v.id_conductor,
+    u.nombre;
+
+CREATE VIEW v_analyst_ingresos_company AS
+SELECT
+    c.id_company,
+    co.nombre AS company,
+    COUNT(p.id_pago) AS total_pagos,
+    SUM(p.importe_total) AS ingresos_totales,
+    SUM(p.comision_company) AS ingresos_company,
+    SUM(v.distancia_km) AS km_totales,
+    ROUND(
+        SUM(p.importe_total) / NULLIF(SUM(v.distancia_km), 0),
+        2
+    ) AS euros_por_km
+FROM pago p
+JOIN viaje v
+    ON v.id_viaje = p.id_viaje
+JOIN conductor c
+    ON c.id_usuario = v.id_conductor
+JOIN company co
+    ON co.id_company = c.id_company
+WHERE p.estado_pago = 'pagado'
+GROUP BY
+    c.id_company,
+    co.nombre;
+
 CREATE VIEW v_analyst_pagos_detalle AS
 SELECT
     p.id_pago,
