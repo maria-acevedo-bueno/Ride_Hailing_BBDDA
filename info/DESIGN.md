@@ -666,18 +666,6 @@ SET DEFAULT ROLE 'rol_app' TO 'backend_user'@'%';
 
 Esto permite que el usuario tenga activo su rol automáticamente al iniciar sesión, sin tener que ejecutar manualmente `SET ROLE`.
 
-### 3.3 Justificación del diseño de seguridad
-
-El diseño de permisos se basa en tres decisiones principales.
-
-Primero, se separan las responsabilidades. Cada usuario tiene una función concreta: administración, aplicación, análisis, consulta o backup.
-
-Segundo, se aplica el principio de mínimos privilegios. Por ejemplo, el usuario de la aplicación no tiene permisos totales sobre la base de datos, sino solo los necesarios para consultar vistas, insertar valoraciones y ejecutar procedimientos almacenados.
-
-Tercero, se usan vistas para controlar la exposición de datos. Los usuarios de análisis y solo lectura no acceden directamente a todas las tablas, sino a vistas preparadas para su función. Esto permite ocultar información sensible y reducir el riesgo de accesos indebidos.
-
-En conjunto, esta configuración protege las tablas principales del sistema y obliga a que las operaciones críticas se realicen de forma controlada mediante procedimientos almacenados.
-
 ## 4. Vistas e Índices
 
 En el proyecto se han creado vistas para controlar el acceso a la información y simplificar algunas consultas frecuentes. Además, se han definido índices para mejorar el rendimiento de las búsquedas, joins y consultas operativas más habituales.
