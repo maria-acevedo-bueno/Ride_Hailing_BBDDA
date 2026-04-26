@@ -1,11 +1,6 @@
--- BACKUP.SQL
--- Plan de backup y recuperación de ride_hailing
-
 USE ride_hailing;
 
--- =========================================================
--- 1. OBJETIVO DEL PLAN
--- =========================================================
+-- 1. OBJETIVO DEL PLAN:
 -- Backup: copia de seguridad de datos y configuración.
 -- Restore: recuperar datos desde un backup.
 -- RPO: pérdida máxima de datos aceptable.
@@ -18,27 +13,20 @@ USE ride_hailing;
 -- Método principal: backup lógico con mysqldump.
 -- Mejora posible: PITR si el binlog está activo.
 
--- Este archivo está pensado para documentar el plan y dejar preparados
--- los comandos que se ejecutarían desde la terminal.
--- Los comandos de backup usan backup_user, creado en permissions.sql,
--- para mantener la separación de cuentas por función.
+-- Este archivo está pensado para documentar el plan y dejar preparados los comandos que se ejecutarían desde la terminal.
+-- Los comandos de backup usan backup_user, creado en permissions.sql, para mantener la separación de cuentas por función.
 
 -- La configuración de mysql/conf.d/custom.cnf activa:
 -- log_bin=mysql-bin
 -- binlog_format=ROW
 -- sync_binlog=1
 -- binlog_expire_logs_seconds=604800
--- Esto permite plantear recuperación PITR durante 7 días si se conserva
--- el backup completo y los binlogs necesarios.
+-- Esto permite plantear recuperación PITR durante 7 días si se conserva el backup completo y los binlogs necesarios.
 
-
--- =========================================================
--- 2. BACKUP LÓGICO DE ride_hailing
--- =========================================================
--- Ejecutar en terminal, no dentro de MySQL.
+-- 2. BACKUP LÓGICO DE ride_hailing:
+-- Se debe ejecutar en terminal, no dentro de MySQL.
 -- Incluye la base de datos, procedimientos, triggers y eventos.
--- Usa --single-transaction para obtener un snapshot consistente con InnoDB
--- sin bloquear las tablas durante toda la copia.
+-- Se usa --single-transaction para obtener un snapshot consistente con InnoDB sin bloquear las tablas durante toda la copia.
 
 -- docker exec mysql8 mysqldump \
 --   -ubackup_user -pBackup_Pass_2026! \
@@ -48,14 +36,10 @@ USE ride_hailing;
 --   --set-gtid-purged=OFF \
 --   > backup_ride_hailing_$(date +%Y%m%d).sql
 
-
--- =========================================================
--- 3. BACKUP COMPLETO DEL SERVIDOR
--- =========================================================
+-- 3. BACKUP COMPLETO DEL SERVIDOR:
 -- Incluye todas las bases de datos.
--- En un entorno real permite incluir también la base mysql,
--- donde están usuarios y privilegios.
--- Ejecutar en terminal.
+-- En un entorno real permite incluir también la base mysql, donde están usuarios y privilegios.
+-- Se debe ejecutar en terminal.
 
 -- docker exec mysql8 mysqldump \
 --   -ubackup_user -pBackup_Pass_2026! \
@@ -65,21 +49,15 @@ USE ride_hailing;
 --   --set-gtid-purged=OFF \
 --   > backup_full_$(date +%Y%m%d).sql
 
--- Nota:
--- Si el usuario backup_user no tuviera permisos suficientes para exportar
--- todas las bases de datos del servidor, el backup completo debería ejecutarse
--- con una cuenta administrativa. Para la práctica, el backup principal es el
--- del esquema ride_hailing.
+-- Además:
+-- Si el usuario backup_user no tuviera permisos suficientes para exportar todas las bases de datos del servidor, el backup completo debería ejecutarse con una cuenta administrativa. 
+-- Para la práctica, el backup principal es el del esquema ride_hailing.
 
-
--- =========================================================
--- 4. BACKUP DE TABLAS CONCRETAS
--- =========================================================
+-- 4. BACKUP DE TABLAS CONCRETAS:
 -- Útil para exportar solo las tablas principales de la práctica.
--- Incluye conductor_vehiculo, porque es la tabla que relaciona conductores
--- y vehículos y forma parte del modelo funcional.
+-- Incluye conductor_vehiculo, porque es la tabla que relaciona conductores y vehículos y forma parte del modelo funcional.
 -- Incluye audit_operacion, porque forma parte de la auditoría básica.
--- Ejecutar en terminal.
+-- También se debe ejecutar en terminal.
 
 -- docker exec mysql8 mysqldump \
 --   -ubackup_user -pBackup_Pass_2026! \
@@ -100,13 +78,10 @@ USE ride_hailing;
 --   > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
 
 
--- =========================================================
--- 5. RESTAURAR UN BACKUP
--- =========================================================
+-- 5. RESTAURAR UN BACKUP:
 -- Ejecutar en terminal.
--- Para restaurar un dump que contiene CREATE DATABASE / USE / CREATE TABLE,
--- en esta práctica es más coherente usar root, ya que admin_user tiene
--- privilegios sobre ride_hailing.* pero no privilegios globales de creación.
+-- Para restaurar un dump que contiene CREATE DATABASE / USE / CREATE TABLE, en esta práctica es más coherente usar root, 
+-- ya que admin_user tiene privilegios sobre ride_hailing.* pero no privilegios globales de creación.
 
 -- Opción con cat:
 -- cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
@@ -114,21 +89,16 @@ USE ride_hailing;
 -- Opción con redirección:
 -- docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
 
+-- 6. COMPROBACIONES DESPUÉS DEL RESTORE:
 
--- =========================================================
--- 6. COMPROBACIONES DESPUÉS DEL RESTORE
--- =========================================================
-
--- Comprobar que la base existe.
+-- Se debe comprobar que la base existe:
 SHOW DATABASES;
-
--- Entrar en la base restaurada.
 USE ride_hailing;
 
--- Comprobar tablas.
+-- Se comprueban las tablas:
 SHOW TABLES;
 
--- Conteos básicos.
+-- Conteos básicos:
 SELECT 'company' AS tabla, COUNT(*) AS filas FROM company
 UNION ALL
 SELECT 'usuario', COUNT(*) FROM usuario
@@ -153,7 +123,7 @@ SELECT 'viaje_estado_log', COUNT(*) FROM viaje_estado_log
 UNION ALL
 SELECT 'audit_operacion', COUNT(*) FROM audit_operacion;
 
--- Comprobar claves foráneas declaradas.
+-- Se comprueban claves foráneas declaradas.
 SELECT
     TABLE_NAME,
     CONSTRAINT_NAME,
@@ -162,38 +132,29 @@ FROM information_schema.KEY_COLUMN_USAGE
 WHERE TABLE_SCHEMA = 'ride_hailing'
   AND REFERENCED_TABLE_NAME IS NOT NULL;
 
--- Comprobar procedimientos almacenados.
+-- Se comprueban procedimientos almacenados.
 SHOW PROCEDURE STATUS WHERE Db = 'ride_hailing';
 
--- Comprobar triggers.
+-- Se comprueban triggers y vistas:
 SHOW TRIGGERS FROM ride_hailing;
-
--- Comprobar vistas.
 SELECT
     TABLE_NAME,
     IS_UPDATABLE
 FROM information_schema.VIEWS
 WHERE TABLE_SCHEMA = 'ride_hailing';
 
-
--- =========================================================
--- 7. COMPROBAR SI SE PUEDE HACER PITR
--- =========================================================
+-- 7. SE COMBRUEBA SI SE PUEDE HACER PITR:
 -- PITR = restaurar un backup y aplicar binlogs hasta un momento concreto.
 -- Para que PITR sea viable, log_bin debe estar ON y binlog_format debería ser ROW.
-
 SHOW VARIABLES LIKE 'log_bin';
 SHOW VARIABLES LIKE 'binlog_format';
 SHOW VARIABLES LIKE 'binlog_expire_logs_seconds';
 SHOW BINARY LOGS;
 
-
--- =========================================================
--- 8. EJEMPLO DE PITR
--- =========================================================
+-- 8. EJEMPLO DE PITR:
 -- Caso: se quiere recuperar hasta antes de un DELETE accidental.
 -- Ajustar fechas y nombre de binlog al caso real.
--- Ejecutar en terminal.
+-- Se ejecuta en terminal.
 
 -- 1) Restaurar el backup completo:
 -- cat backup_ride_hailing_10_00.sql | docker exec -i mysql8 mysql -uroot -prootpass
@@ -206,12 +167,9 @@ SHOW BINARY LOGS;
 --   /var/lib/mysql/mysql-bin.000001 > cambios.sql
 
 -- 3) Aplicar cambios:
--- cat cambios.sql | docker exec -i mysql8 mysql -uroot -prootpass
+-- cat cambios.sql | docker exec -i mysql8 mysql -uroot -prootpas
 
-
--- =========================================================
--- 9. BUSCAR UNA OPERACIÓN EN EL BINLOG
--- =========================================================
+-- 9. BUSCAR UNA OPERACIÓN EN EL BINLOG:
 -- Ejemplo para localizar un DELETE.
 -- Ejecutar en terminal.
 
@@ -227,10 +185,7 @@ SHOW BINARY LOGS;
 --   --stop-position=12345 \
 --   /var/lib/mysql/mysql-bin.000001 > cambios.sql
 
-
--- =========================================================
--- 10. SNAPSHOT CONSISTENTE
--- =========================================================
+-- 10. SNAPSHOT CONSISTENTE:
 -- Los snapshots pueden ser inconsistentes si MySQL está escribiendo.
 -- Para coordinarlo, se puede bloquear brevemente la lectura de tablas.
 -- En esta práctica el método principal es mysqldump, pero se documenta
@@ -244,12 +199,9 @@ SHOW BINARY LOGS;
 -- Liberar después:
 -- UNLOCK TABLES;
 
-
--- =========================================================
--- 11. SCRIPT DE BACKUP CON ROTACIÓN
--- =========================================================
+-- 11. SCRIPT DE BACKUP CON ROTACIÓN:
 -- Guardar como backup_mysql.sh.
--- Ejecutar desde el sistema, no desde MySQL.
+-- Se ejecuta desde el sistema, no desde MySQL.
 
 -- #!/bin/bash
 -- FECHA=$(date +%Y%m%d_%H%M%S)
@@ -279,19 +231,3 @@ SHOW BINARY LOGS;
 -- Programar backup diario a las 3:00:
 -- crontab -e
 -- 0 3 * * * /scripts/backup_mysql.sh >> /var/log/mysql_backup.log 2>&1
-
-
--- =========================================================
--- 12. JUSTIFICACIÓN RESUMIDA PARA LA DEFENSA
--- =========================================================
--- 1) Usamos backup lógico con mysqldump porque el proyecto es pequeño,
---    portable y fácil de restaurar en Docker.
--- 2) Usamos --single-transaction porque las tablas son InnoDB y así se obtiene
---    una copia consistente sin bloquear escrituras durante toda la exportación.
--- 3) Incluimos --routines --triggers --events porque la lógica de negocio,
---    auditoría y automatización también forman parte del sistema.
--- 4) Activamos binlog en formato ROW para poder plantear recuperación PITR.
--- 5) Definimos RPO de 24 horas por backup diario y RTO de restauración manual
---    en Docker, suficiente para una práctica universitaria.
--- 6) Separamos el usuario backup_user de usuarios de aplicación y analítica
---    siguiendo el principio de mínimos privilegios.
