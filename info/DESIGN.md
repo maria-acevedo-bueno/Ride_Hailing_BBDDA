@@ -254,11 +254,11 @@ erDiagram
 
 #### `company`
 
-La tabla `company` almacena las empresas o flotas que operan dentro de la plataforma. Cada conductor y cada vehículo pertenecen a una compañía.
+La tabla `company` almacena las empresas que operan en la plataforma. Cada conductor y cada vehículo pertenecen a una company.
 
-Su clave primaria es `id_company`, generada automáticamente. Además, el campo `cif` tiene una restricción `UNIQUE`, de forma que no pueden existir dos compañías con el mismo identificador fiscal.
+Su clave primaria es `id_company`, generada automáticamente. Además, el campo `cif` tiene una restricción `UNIQUE`, ya que no pueden existir dos companies con el mismo identificador fiscal.
 
-Incluye campos de control como `fecha_alta`, `fecha_modificacion` y `activo`, que permiten registrar cuándo se creó la compañía, cuándo se modificó por última vez y si sigue operativa en el sistema.
+Incluye campos de control como `fecha_alta`, `fecha_modificacion` y `activo`, que permiten registrar cuándo se creó la company, cuándo se modificó por última vez y si sigue operativa en el sistema.
 
 #### `usuario`
 

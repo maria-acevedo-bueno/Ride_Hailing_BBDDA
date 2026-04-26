@@ -1,28 +1,18 @@
--- =========================================================
--- CONFIGURACION DEL ESQUEMA OPERATIVO
--- =========================================================
--- Se elimina la base de datos previa para reconstruir el entorno
--- desde cero en cada carga del esquema.
+-- Primero, se elimina la base de datos previa, esto nos permite reconstruir rápidamente la base de datos en caso de error en las pruebas.
 DROP DATABASE IF EXISTS ride_hailing;
 
--- Se crea la base de datos principal del proyecto.
--- utf8mb4 permite almacenar caracteres internacionales y emojis.
--- utf8mb4_0900_ai_ci es la collation recomendada en MySQL 8.
+-- Se crea la base de datos.
+-- utf8mb4 nos permite almacenar caracteres internacionales y emojis.
+-- utf8mb4_0900_ai_ci es la collation recomendada para MySQL 8.
 CREATE DATABASE ride_hailing
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
 
--- A partir de aquí todas las sentencias se ejecutan sobre esta base.
+-- A partir de aquí, los comandos se escriben sobre la base de datos por lo que entramos en ella.
 USE ride_hailing;
 
--- =========================================================
--- 1. TABLAS MAESTRAS Y COMPANIES
--- =========================================================
-
--- Tabla company:
--- almacena las empresas o flotas que operan en la plataforma.
+-- La tabla company almacena las empresas que operan en la plataforma.
 -- Cada conductor y cada vehículo pertenecen a una company.
--- Se usa una restricción UNIQUE sobre cif para evitar duplicados.
 CREATE TABLE IF NOT EXISTS company (
 
     id_company BIGINT NOT NULL AUTO_INCREMENT,
@@ -37,11 +27,8 @@ CREATE TABLE IF NOT EXISTS company (
 
 ) ENGINE = InnoDB;
 
--- Tabla usuario:
--- almacena la información común de cualquier persona registrada en el sistema.
--- Esta tabla centraliza los atributos personales básicos para evitar duplicidad.
+-- La tabla usuario almacena la información de cualquier persona registrada en el sistema.
 -- A partir de esta tabla se especializan riders y conductores.
--- También se obliga a que email y teléfono sean únicos dentro del sistema.
 CREATE TABLE IF NOT EXISTS usuario (
 
     id_usuario BIGINT NOT NULL AUTO_INCREMENT,
