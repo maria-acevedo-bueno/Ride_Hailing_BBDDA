@@ -355,43 +355,43 @@ erDiagram
 
 La tabla `company` almacena las empresas que operan en la plataforma. Cada conductor y cada vehículo pertenecen a una company.
 
-Su clave primaria es `id_company`, generada automáticamente. Además, el campo `cif` tiene una restricción `UNIQUE`, ya que no pueden existir dos companies con el mismo identificador fiscal.
+El campo `cif` tiene una restricción `UNIQUE`, ya que no pueden existir dos companies con el mismo identificador fiscal.
 
-Incluye campos de control como `fecha_alta`, `fecha_modificacion` y `activo`, que permiten registrar cuándo se creó la company, cuándo se modificó por última vez y si sigue operativa en el sistema.
+Los campos `fecha_alta`, `fecha_modificacion` y `activo` permiten registrar cuándo se creó la company, cuándo se modificó por última vez y si sigue operativa en el sistema.
 
 #### `usuario`
 
-La tabla `usuario` almacena la información común de todas las personas registradas en el sistema, independientemente de si actúan como riders o como conductores.
+La tabla `usuario` almacena la información de todas las personas registradas en el sistema, independientemente de si actúan como riders o como conductores.
 
-Su clave primaria es `id_usuario`. Los campos `email` y `telefono` tienen restricciones `UNIQUE`, ya que identifican datos personales que no deben repetirse entre usuarios.
+Los campos `email` y `telefono` tienen restricciones `UNIQUE`, ya que representan datos personales que no deben repetirse entre usuarios.
 
-Esta tabla centraliza los datos personales básicos para evitar duplicidad. A partir de ella se especializan los usuarios mediante las tablas `rider` y `conductor`.
+A partir de esta tabla, se especializan los usuarios mediante las tablas `rider` y `conductor`.
 
 #### `rider`
 
 La tabla `rider` representa a los usuarios que pueden solicitar viajes.
 
-Su clave primaria es `id_usuario`, que también es clave foránea hacia `usuario(id_usuario)`. Esto implementa una relación de especialización: un rider siempre debe existir previamente como usuario.
+Su clave primaria es clave foránea de `usuario(id_usuario)`. Esto implementa una relación por la que un rider siempre debe existir previamente como usuario. No puede existir un rider sin un usuario enlazado al mismo.
 
-La acción referencial `ON DELETE RESTRICT` impide borrar un usuario si está registrado como rider, protegiendo la integridad de los viajes asociados.
+La acción `ON DELETE RESTRICT` impide borrar un usuario si está registrado como rider, protegiendo la integridad de los datos.
 
 #### `conductor`
 
 La tabla `conductor` representa a los usuarios que pueden recibir ofertas y realizar viajes.
 
-Su clave primaria es `id_usuario`, que también referencia a `usuario(id_usuario)`. Además, cada conductor pertenece obligatoriamente a una compañía mediante `id_company`, clave foránea hacia `company(id_company)`.
+Su clave primaria también referencia a `usuario(id_usuario)`. Además, cada conductor pertenece obligatoriamente a una compañía mediante `id_company` que es una clave foránea hacia `company(id_company)`.
 
-El campo `numero_licencia` es único, ya que identifica de forma individual al conductor desde el punto de vista operativo. El campo `estado_conductor` permite controlar su disponibilidad mediante los valores `disponible`, `en_viaje`, `desconectado` y `suspendido`.
+El campo `numero_licencia` es único, ya que identifica de forma el permiso de conducción de cada conductor. El campo `estado_conductor` permite controlar su disponibilidad mediante los valores `disponible`, `en_viaje`, `desconectado` y `suspendido`, algo que nos permitirá realizar comprobaciones en los procedimientos almacenados.
 
-La tabla incluye índices sobre `id_company` y `estado_conductor`, porque son columnas frecuentes en consultas operativas, especialmente para localizar conductores disponibles por empresa o estado.
+La tabla incluye índices sobre `id_company` y `estado_conductor`, ya que son columnas frecuentes en consultas, especialmente para localizar conductores disponibles por empresa o estado.
 
 #### `vehiculo`
 
 La tabla `vehiculo` almacena los vehículos gestionados por las compañías.
 
-Su clave primaria es `id_vehiculo`. Cada vehículo pertenece a una compañía mediante `id_company`, que referencia a `company(id_company)`.
+Cada vehículo pertenece a una compañía.
 
-La matrícula se define como única mediante `uk_vehiculo_matricula`, ya que identifica de forma natural al vehículo. La columna `capacidad` tiene una restricción `CHECK` que obliga a que su valor sea mayor que cero, evitando datos imposibles.
+La matrícula se define como única, ya que identifica al vehículo y no puede estar duplicada. La columna `capacidad` tiene una restricción que obliga a que su valor sea mayor que cero, evitando datos imposibles.
 
 El campo `activo` permite distinguir vehículos operativos de vehículos dados de baja sin necesidad de eliminarlos físicamente.
 
@@ -399,9 +399,9 @@ El campo `activo` permite distinguir vehículos operativos de vehículos dados d
 
 La tabla `conductor_vehiculo` resuelve la relación muchos a muchos entre conductores y vehículos.
 
-Un conductor puede tener asignados distintos vehículos a lo largo del tiempo, y un mismo vehículo puede haber sido utilizado por distintos conductores. Por eso se utiliza una tabla intermedia con las columnas `id_conductor`, `id_vehiculo`, `fecha_desde` y `fecha_hasta`.
+Un conductor puede tener asignados distintos vehículos a lo largo del tiempo, y un mismo vehículo puede haber sido utilizado por distintos conductores. Por eso se utiliza esta tabla intermedia.
 
-La clave primaria compuesta está formada por `id_conductor`, `id_vehiculo` y `fecha_desde`, lo que permite registrar varias asignaciones históricas entre el mismo conductor y el mismo vehículo en momentos diferentes.
+La clave primaria compuesta está formada por `id_conductor`, `id_vehiculo` y `fecha_desde`, lo que permite registrar varias asignaciones históricas entre el mismo conductor y el mismo vehículo en momentos diferentes sin que estos estén duplicados.
 
 Cuando `fecha_hasta` es `NULL`, la asignación se considera vigente. Los índices sobre `(id_conductor, fecha_hasta)` y `(id_vehiculo, fecha_hasta)` ayudan a localizar rápidamente las asignaciones activas.
 
@@ -409,15 +409,15 @@ Cuando `fecha_hasta` es `NULL`, la asignación se considera vigente. Los índice
 
 La tabla `viaje` representa el ciclo de vida completo de un trayecto solicitado por un rider.
 
-Su clave primaria es `id_viaje`. Cada viaje pertenece obligatoriamente a un rider mediante `id_rider`, que referencia a `rider(id_usuario)`.
+Cada viaje pertenece obligatoriamente a un rider.
 
-Las columnas `id_conductor` y `id_vehiculo` son opcionales porque un viaje puede existir inicialmente en estado `solicitado`, antes de que haya sido aceptado por un conductor. Cuando el viaje es aceptado, se asignan el conductor y el vehículo correspondientes.
+Las columnas `id_conductor` y `id_vehiculo` pueden ser NULL porque un viaje puede existir inicialmente en estado `solicitado`, antes de que haya sido aceptado por un conductor. Cuando el viaje es aceptado, se asignan el conductor y el vehículo correspondientes.
 
-El campo `estado` controla la evolución del viaje mediante los valores `solicitado`, `aceptado`, `en_curso`, `finalizado` y `cancelado`.
+El campo `estado` controla cómo va avanzando el viaje mediante los valores `solicitado`, `aceptado`, `en_curso`, `finalizado` y `cancelado`.
 
 La tabla también almacena fechas relevantes del ciclo de vida del viaje: solicitud, aceptación, inicio y fin. Además, guarda coordenadas y direcciones de origen y destino.
 
-Se incluyen restricciones `CHECK` para validar que las latitudes estén entre `-90` y `90`, las longitudes entre `-180` y `180`, y que la distancia no sea negativa.
+Se incluyen restricciones para validar que las latitudes estén entre `-90` y `90`, las longitudes entre `-180` y `180`, y que la distancia no sea negativa.
 
 Los índices sobre estado, conductor y rider permiten optimizar consultas frecuentes, como buscar viajes por estado, historial de un conductor o historial de un rider.
 
@@ -425,23 +425,23 @@ Los índices sobre estado, conductor y rider permiten optimizar consultas frecue
 
 La tabla `oferta` almacena las ofertas enviadas a los conductores para un viaje.
 
-Cada oferta pertenece a un viaje mediante `id_viaje` y a un conductor mediante `id_conductor`. La restricción `UNIQUE (id_viaje, id_conductor)` impide que el mismo conductor reciba dos veces la misma oferta para el mismo viaje.
+Cada oferta pertenece a un viaje y a un conductor. La restricción `UNIQUE (id_viaje, id_conductor)` impide que el mismo conductor reciba más de una vez la misma oferta para el mismo viaje.
 
 El campo `estado_oferta` permite controlar si la oferta está `pendiente`, `aceptada`, `rechazada` o `expirada`.
 
-Para garantizar que solo pueda existir una oferta aceptada por viaje, se utiliza la columna generada `id_viaje_aceptado`. Esta columna solo toma valor cuando la oferta está aceptada. Sobre ella se define una restricción `UNIQUE`, aprovechando que MySQL permite múltiples valores `NULL` en una restricción única.
+Para garantizar que solo pueda existir una oferta aceptada por viaje, se utiliza la columna generada `id_viaje_aceptado`. Esta columna solo toma valor cuando la oferta está aceptada.
 
 De esta forma, pueden existir muchas ofertas pendientes, rechazadas o expiradas para un viaje, pero solo una oferta aceptada.
 
 #### `pago`
 
-La tabla `pago` almacena la liquidación económica de un viaje finalizado.
+La tabla `pago` almacena la transacción económica de un viaje finalizado.
 
-Su clave primaria es `id_pago`. La columna `id_viaje` es clave foránea hacia `viaje(id_viaje)` y además tiene una restricción `UNIQUE`, lo que garantiza que cada viaje pueda tener como máximo un pago asociado.
+La columna `id_viaje` es clave foránea hacia `viaje(id_viaje)` y además tiene una restricción `UNIQUE`, lo que garantiza que cada viaje pueda tener como máximo un pago asociado.
 
 La tabla registra el importe total pagado, la comisión de la compañía y el importe correspondiente al conductor. La restricción `ck_pago_sumas` comprueba que el total sea coherente con la suma de la comisión y el importe del conductor, admitiendo una pequeña tolerancia por redondeos.
 
-También se validan importes no negativos mediante restricciones `CHECK`.
+También se valida que los importes no puedan ser negativos mediante restricciones `CHECK`.
 
 El campo `metodo_pago` limita los métodos permitidos a `tarjeta_credito`, `efectivo` y `wallet`, mientras que `estado_pago` controla si el pago está `pendiente`, `completado`, `fallido` o `reembolsado`.
 
@@ -449,13 +449,13 @@ El campo `metodo_pago` limita los métodos permitidos a `tarjeta_credito`, `efec
 
 La tabla `valoracion` almacena las valoraciones emitidas por los usuarios tras un viaje.
 
-Cada valoración se asocia a un viaje mediante `id_viaje`. Además, registra quién emite la valoración con `id_usuario_valorador` y quién la recibe con `id_usuario_valorado`.
+Cada valoración se asocia a un viaje. Además, registra quién emite la valoración y quién la recibe.
 
-El campo `rol_valorado` indica si el usuario valorado actúa como `rider` o como `conductor`. La puntuación se restringe mediante un `CHECK` para que solo pueda tomar valores entre 1 y 5.
+El campo `rol_valorado` indica si el usuario valorado actúa como `rider` o como `conductor` ya que los riders pueden valorar al conductor y viceversa. 
 
-Esta tabla permite que un viaje genere valoraciones en ambos sentidos: del rider al conductor y del conductor al rider.
+La puntuación se restringe mediante un `CHECK` para que solo pueda tomar valores entre 1 y 5.
 
-El índice sobre `(id_usuario_valorado, fecha_valoracion)` facilita consultas de reputación, rankings o evolución temporal de las puntuaciones.
+El índice sobre `(id_usuario_valorado, fecha_valoracion)` facilita consultas de reputación o rankings.
 
 #### `viaje_estado_log`
 
@@ -463,19 +463,19 @@ La tabla `viaje_estado_log` registra el historial de cambios de estado de los vi
 
 Cada fila almacena el viaje afectado, el estado anterior, el nuevo estado, la fecha del cambio y un comentario descriptivo.
 
-Esta tabla se alimenta automáticamente mediante el trigger `tr_audit_viaje_estado`, que inserta un registro cada vez que el campo `estado` de un viaje cambia realmente.
+Esta tabla se actualiza automáticamente mediante el trigger `tr_audit_viaje_estado`, que inserta un registro cada vez que el campo `estado` de un viaje cambia.
 
 Su objetivo es proporcionar trazabilidad funcional del ciclo de vida de los viajes.
 
 #### `audit_operacion`
 
-La tabla `audit_operacion` almacena una auditoría general de operaciones relevantes sobre la base de datos.
+La tabla `audit_operacion` almacena una auditoría general de operaciones relevantes.
 
 A diferencia de `viaje_estado_log`, que se centra únicamente en cambios de estado de viajes, esta tabla registra operaciones más generales sobre viajes, ofertas y pagos.
 
-Cada registro incluye la tabla afectada, el identificador del registro, la acción realizada, el usuario MySQL que ejecutó la operación, la fecha y una descripción.
+Cada registro incluye la tabla afectada, el identificador del registro, la acción realizada, el usuario que ejecutó la operación, la fecha y una breve descripción.
 
-Esta tabla no tiene claves foráneas directas hacia las tablas auditadas, porque usa un modelo genérico basado en `tabla_afectada` e `id_registro`. Esto permite auditar operaciones de distintas tablas dentro de una misma estructura.
+Esta tabla no tiene claves foráneas directas hacia las tablas ya que se referencia a `tabla_afectada` e `id_registro`. Esto permite auditar operaciones de distintas tablas dentro de una misma estructura.
 
 ### 2.3 Relaciones entre tablas
 
