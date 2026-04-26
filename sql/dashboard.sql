@@ -1,9 +1,8 @@
 USE ride_hailing;
 
--- 1. RESUMEN GENERAL DEL SISTEMA
+-- RESUMEN GENERAL DEL SISTEMA
 
--- Resumen global de entidades principales.
--- Sirve para comprobar rápidamente el volumen cargado en la base de datos.
+-- Conteo global de las entradas por cada tabla en la base de datos.
 SELECT 'usuarios' AS metrica, COUNT(*) AS total
 FROM usuario
 UNION ALL
@@ -31,9 +30,7 @@ UNION ALL
 SELECT 'operaciones_auditadas', COUNT(*)
 FROM audit_operacion;
 
--- Resumen de viajes por estado.
--- Permite ver cuántos viajes están solicitados, aceptados, en curso,
--- finalizados o cancelados.
+-- Conteo de viajes por estado (cuántos viajes están solicitados, aceptados, en curso, finalizados o cancelados).
 SELECT
     estado,
     COUNT(*) AS total_viajes
@@ -41,9 +38,7 @@ FROM viaje
 GROUP BY estado
 ORDER BY total_viajes DESC;
 
--- Resumen de ofertas por estado.
--- Permite ver cuántas ofertas están pendientes, aceptadas,
--- rechazadas o expiradas.
+-- Conteo de ofertas por estado (cuántas ofertas están pendientes, aceptadas, rechazadas o expiradas).
 SELECT
     estado_oferta,
     COUNT(*) AS total_ofertas
@@ -51,10 +46,9 @@ FROM oferta
 GROUP BY estado_oferta
 ORDER BY total_ofertas DESC;
 
--- 2. MÉTRICAS DE NEGOCIO
+-- MÉTRICAS DE NEGOCIO
 
--- 2.1. Viajes solicitados por hora del día.
--- Métrica pedida en el enunciado para el dashboard de negocio.
+-- Métrica que muestra viajes solicitados a lo largo del día.
 SELECT
     HOUR(fecha_solicitud) AS hora_del_dia,
     COUNT(*) AS total_viajes_solicitados
@@ -62,8 +56,7 @@ FROM viaje
 GROUP BY HOUR(fecha_solicitud)
 ORDER BY hora_del_dia ASC;
 
--- 2.2. Ofertas aceptadas por hora del día.
--- Permite observar en qué horas hay más aceptación de viajes.
+-- Métrica que muestra ofertas aceptadas a lo largo del día.
 SELECT
     HOUR(fecha_respuesta) AS hora_del_dia,
     COUNT(*) AS ofertas_aceptadas
@@ -73,9 +66,7 @@ WHERE estado_oferta = 'aceptada'
 GROUP BY HOUR(fecha_respuesta)
 ORDER BY hora_del_dia ASC;
 
--- 2.3. Tasa de aceptación por conductor.
--- Fórmula:
--- ofertas aceptadas / total de ofertas recibidas * 100
+-- Métrica de tasa de aceptación por conductor en la que calcula: (ofertas aceptadas / total de ofertas recibidas) * 100
 SELECT
     o.id_conductor,
     u.nombre AS conductor,
@@ -95,8 +86,7 @@ JOIN usuario u
 GROUP BY o.id_conductor, u.nombre
 ORDER BY tasa_aceptacion_pct DESC;
 
--- 2.4. Tasa de aceptación por company.
--- Agrupa las ofertas de los conductores según la empresa a la que pertenecen.
+-- Métrica de tasa de aceptación por company en la que calcula: (ofertas aceptadas / total de ofertas recibidas) * 100
 SELECT
     c.id_company,
     c.nombre AS company,
@@ -118,8 +108,7 @@ JOIN company c
 GROUP BY c.id_company, c.nombre
 ORDER BY tasa_aceptacion_pct DESC;
 
--- 2.5. Kilometraje medio y duración media de viajes finalizados.
--- Solo se consideran viajes finalizados porque tienen fecha_inicio y fecha_fin.
+-- Métrica de kilometraje medio y duración media de viajes finalizados (que tengan fechas de inicio y fin registradas).
 SELECT
     COUNT(*) AS viajes_finalizados,
     ROUND(AVG(distancia_km), 2) AS kilometraje_medio_km,
@@ -129,8 +118,7 @@ WHERE estado = 'finalizado'
   AND fecha_inicio IS NOT NULL
   AND fecha_fin IS NOT NULL;
 
--- 2.6. Ingresos por conductor.
--- Incluye euros/km y euros/minuto para medir rentabilidad operativa.
+-- Métrica de ingresos por conductor que incluye euros/km y euros/minuto.
 SELECT
     v.id_conductor,
     u.nombre AS conductor,
@@ -163,8 +151,7 @@ WHERE v.estado = 'finalizado'
 GROUP BY v.id_conductor, u.nombre
 ORDER BY ingresos_conductor DESC;
 
--- 2.7. Ingresos por company.
--- Usa la comisión registrada en pago como ingreso de la company/plataforma.
+-- Métrica de ingresos por company que usa la comisión registrada en pago como ingreso de la company/plataforma.
 SELECT
     c.id_company,
     c.nombre AS company,
@@ -199,8 +186,7 @@ WHERE v.estado = 'finalizado'
 GROUP BY c.id_company, c.nombre
 ORDER BY ingresos_company DESC;
 
--- 2.8. Valoración media por conductor.
--- Métrica útil para relacionar calidad del servicio con ingresos y aceptación.
+-- Métrica de valoración media por conductor que calcula la puntuación media de las valoraciones recibidas por cada conductor.
 SELECT
     val.id_usuario_valorado AS id_conductor,
     u.nombre AS conductor,
@@ -213,56 +199,55 @@ WHERE val.rol_valorado = 'conductor'
 GROUP BY val.id_usuario_valorado, u.nombre
 ORDER BY puntuacion_media DESC;
 
--- 3. MÉTRICAS DE BASE DE DATOS PARA MONITORIZACIÓN
+-- MÉTRICAS DE BASE DE DATOS PARA MONITORIZACIÓN
 
--- 3.1. Uptime del servidor MySQL.
+-- Uptime del servidor MySQL.
 SHOW STATUS LIKE 'Uptime';
 
--- 3.2. Conexiones activas.
+-- çConexiones activas.
 SHOW STATUS LIKE 'Threads_connected';
 
--- 3.3. Máximo de conexiones alcanzado.
+-- Máximo de conexiones alcanzado.
 SHOW STATUS LIKE 'Max_used_connections';
 
--- 3.4. Límite de conexiones configurado.
+-- Límite de conexiones configurado.
 SHOW VARIABLES LIKE 'max_connections';
 
--- 3.5. Conexiones rechazadas por superar max_connections.
+-- Conexiones rechazadas por superar max_connections.
 SHOW STATUS LIKE 'Connection_errors_max_connections';
 
--- 3.6. Total de queries ejecutadas.
+-- Total de queries ejecutadas.
 SHOW STATUS LIKE 'Queries';
 
--- 3.7. Total de preguntas/consultas recibidas desde clientes.
+-- Total de preguntas/consultas recibidas desde clientes.
 SHOW STATUS LIKE 'Questions';
 
--- 3.8. Desglose de operaciones por tipo.
+-- Desglose de operaciones por tipo.
 SHOW STATUS LIKE 'Com_select';
 SHOW STATUS LIKE 'Com_insert';
 SHOW STATUS LIKE 'Com_update';
 SHOW STATUS LIKE 'Com_delete';
 
--- 3.9. Queries lentas acumuladas.
+-- Queries lentas acumuladas.
 SHOW STATUS LIKE 'Slow_queries';
 
--- 3.10. Configuración del slow query log.
+-- Configuración del slow query log.
 SHOW VARIABLES LIKE 'slow_query_log%';
 SHOW VARIABLES LIKE 'long_query_time';
 
--- 3.11. Tamaño del buffer pool de InnoDB.
+-- Tamaño del buffer pool de InnoDB.
 SHOW VARIABLES LIKE 'innodb_buffer_pool_size';
 
--- 3.12. Páginas del buffer pool.
+-- Páginas del buffer pool.
 SHOW STATUS LIKE 'Innodb_buffer_pool_pages_total';
 SHOW STATUS LIKE 'Innodb_buffer_pool_pages_free';
 SHOW STATUS LIKE 'Innodb_buffer_pool_pages_dirty';
 
--- 3.13. Lecturas lógicas y lecturas físicas del buffer pool.
+-- Lecturas lógicas y lecturas físicas del buffer pool.
 SHOW STATUS LIKE 'Innodb_buffer_pool_read_requests';
 SHOW STATUS LIKE 'Innodb_buffer_pool_reads';
 
--- 3.14. Hit ratio del buffer pool.
--- (read_requests - reads) / read_requests * 100
+-- Hit ratio del buffer pool, que calcula: (read_requests - reads) / read_requests * 100
 -- Se controla la división por cero para evitar errores en entornos recién arrancados.
 SELECT
     ROUND(
@@ -286,15 +271,14 @@ SELECT
         4
     ) AS buffer_pool_hit_ratio_pct;
 
--- 3.15. Esperas por locks de fila en InnoDB.
+-- Esperas por locks de fila en InnoDB.
 SHOW STATUS LIKE 'Innodb_row_lock_waits';
 SHOW STATUS LIKE 'Innodb_row_lock_time_avg';
 
--- 3.16. Deadlocks detectados.
+-- Deadlocks detectados.
 SHOW STATUS LIKE 'Innodb_deadlocks';
 
--- 3.17. Transacciones activas.
--- Útil para detectar transacciones largas o bloqueadas.
+-- Mide transacciones activas, útil para detectar transacciones largas o bloqueadas.
 SELECT
     trx_id,
     trx_state,
@@ -303,8 +287,7 @@ SELECT
 FROM information_schema.INNODB_TRX
 ORDER BY trx_started ASC;
 
--- 3.18. Tamaño de tablas e índices del esquema.
--- Basado en information_schema.tables, como en los apuntes de administración.
+-- Mide el tamaño de tablas e índices del esquema basado en information_schema.tables
 SELECT
     table_name,
     ROUND(data_length / 1024 / 1024, 2) AS datos_MB,
@@ -313,13 +296,9 @@ FROM information_schema.tables
 WHERE table_schema = 'ride_hailing'
 ORDER BY datos_MB + indices_MB DESC;
 
--- 4. COMPROBACIÓN DE ÍNDICES CON EXPLAIN
---
--- EXPLAIN no es una métrica de negocio, pero sirve para demostrar
--- que las consultas principales del dashboard usan índices.
+-- COMPROBACIÓN DE ÍNDICES CON EXPLAIN
 
--- 4.1. Consulta sobre ofertas pendientes.
--- Debería apoyarse en índices sobre estado_oferta y/o viaje/estado.
+-- Consulta sobre ofertas pendientes ordenadas por fecha de envío. 
 EXPLAIN
 SELECT
     o.id_oferta,
@@ -331,8 +310,7 @@ FROM oferta o
 WHERE o.estado_oferta = 'pendiente'
 ORDER BY o.fecha_envio DESC;
 
--- 4.2. Consulta sobre viajes por estado y fecha.
--- Relacionada con el índice idx_viaje_estado_fecha.
+-- Consulta sobre viajes por estado y fecha.
 EXPLAIN
 SELECT
     v.id_viaje,
@@ -342,8 +320,7 @@ FROM viaje v
 WHERE v.estado = 'finalizado'
 ORDER BY v.fecha_solicitud DESC;
 
--- 4.3. Consulta de ingresos por company.
--- Permite justificar JOINs e índices de claves foráneas.
+-- Consulta de ingresos por company que agrupa por company y ordena por ingresos.
 EXPLAIN
 SELECT
     c.nombre AS company,
@@ -359,12 +336,9 @@ WHERE v.estado = 'finalizado'
   AND p.estado_pago = 'completado'
 GROUP BY c.id_company, c.nombre;
 
--- =========================================================
--- 5. MÉTRICAS DE AUDITORÍA
--- =========================================================
+-- MÉTRICAS DE AUDITORÍA
 
--- Operaciones auditadas por tabla.
--- Permite comprobar la actividad registrada automáticamente por triggers.
+-- Muestra las operaciones auditadas por tabla.
 SELECT
     tabla_afectada,
     accion,
@@ -373,8 +347,7 @@ FROM audit_operacion
 GROUP BY tabla_afectada, accion
 ORDER BY tabla_afectada, accion;
 
--- Últimas operaciones auditadas.
--- Sirve para enseñar trazabilidad funcional durante la defensa.
+-- Muestra las últimas operaciones auditadas ordenadas por fecha de operación.
 SELECT
     id_audit,
     tabla_afectada,
@@ -387,8 +360,7 @@ FROM audit_operacion
 ORDER BY fecha_operacion DESC
 LIMIT 20;
 
--- Cambios de estado de viaje por tipo.
--- Resume el histórico funcional de transiciones de viaje.
+-- Muestra los cambios de estado de viaje por tipo de cambio y el total de cambios por cada tipo.
 SELECT
     estado_anterior,
     estado_nuevo,
