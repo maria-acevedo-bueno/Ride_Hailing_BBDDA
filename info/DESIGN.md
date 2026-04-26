@@ -76,6 +76,105 @@ También se monta una carpeta local de configuración:
 
 Esta carpeta permite añadir archivos .cnf con configuración personalizada de MySQL. Se monta en modo solo lectura (`:ro`) para evitar modificaciones accidentales desde el contenedor.
 
+#### 1.4.1 Archivo `custom.cnf`
+
+Además del volumen de datos, se incluye un archivo `custom.cnf` propio para MySQL en `mysql/conf.d`. 
+
+Este archivo se monta dentro del contenedor `/etc/mysql/conf.d`, por lo que MySQL lo lee automáticamente al arrancar. Su objetivo es fijar ciertos parámetros del servidor relacionados con validación de datos, logs, rendimiento, binary log, monitorización, etc.
+
+##### Sección del servidor
+
+```
+[mysqld]
+``` 
+
+Esta sección indica que las opciones siguientes se aplican al servidor MySQL.
+
+##### Validación de datos
+
+``` 
+sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+```
+
+Este parámetro controla cómo valida MySQL ciertas operaciones.
+
+`STRICT_TRANS_TABLES` hace que se rechacen datos inválidos en lugar de aceptarlos con conversiones automáticas.
+
+`ERROR_FOR_DIVISION_BY_ZERO` trata las divisiones por cero como error.
+
+`NO_ENGINE_SUBSTITUTION` evita que MySQL sustituya automáticamente el motor de almacenamiento solicitado si no está disponible.
+
+##### Logs de diagnóstico
+
+```
+log_error_verbosity=3
+```
+
+Este parámetro aumenta el nivel de detalle del log de errores. Sirve para diagnosticar problemas de arranque, configuración o ejecución del servidor.
+
+```
+slow_query_log=1
+long_query_time=0.5
+```
+
+`slow_query_log=1` activa el registro de consultas lentas.
+
+`long_query_time=0.5` indica que se registran las consultas que tardan más de 0,5 segundos.
+
+Esto permite detectar consultas poco eficientes, especialmente en el dashboard o en consultas de análisis.
+
+##### Rendimiento básico
+
+```
+innodb_buffer_pool_size=256M
+max_connections=200
+```
+
+`innodb_buffer_pool_size` reserva memoria para que InnoDB almacene en caché datos e índices.
+
+`max_connections` establece el número máximo de conexiones simultáneas permitidas por el servidor.
+
+##### Durabilidad de transacciones
+
+```
+innodb_flush_log_at_trx_commit=1
+```
+
+Este parámetro hace que el redo log se escriba en disco en cada `COMMIT`. Con ello se reduce el riesgo de perder transacciones confirmadas si el servidor se detiene inesperadamente.
+
+##### Binary log y recuperación
+
+```
+server_id=1
+```
+
+Este identificador es necesario cuando se usa binary log y también sería obligatorio en escenarios de replicación.
+
+```
+log_bin=mysql-bin
+binlog_format=ROW
+sync_binlog=1
+binlog_expire_logs_seconds=604800
+```
+
+`log_bin=mysql-bin` activa el binary log, que registra cambios realizados sobre los datos.
+
+`binlog_format=ROW` guarda los cambios fila a fila, lo que resulta adecuado para recuperación y replicación.
+
+`sync_binlog=1` sincroniza el binary log con disco en cada `COMMIT`, aumentando la seguridad ante fallos.
+
+`binlog_expire_logs_seconds=604800` conserva los binlogs durante 604800 segundos (i.e. 7 días).
+
+Esta configuración permite plantear una recuperación PITR, combinando un backup completo con los cambios registrados posteriormente en los binlogs.
+
+##### Monitorización
+
+```
+performance_schema=1
+```
+
+`performance_schema` permite consultar métricas internas de MySQL, como esperas, bloqueos, transacciones y datos de rendimiento. Esto sirve como apoyo para la monitorización y el diagnóstico del servidor.
+
 ### 1.5 Healthcheck
 
 Se ha añadido un healthcheck para comprobar que MySQL está listo para aceptar conexiones:
