@@ -145,7 +145,7 @@ ON ride_hailing.* TO 'rol_backup';
 GRANT RELOAD, PROCESS, REPLICATION CLIENT
 ON *.* TO 'rol_backup';
 
--- 4. GESTION DE USUARIOS
+-- GESTION DE USUARIOS
 
 CREATE USER IF NOT EXISTS 'admin_user'@'%' IDENTIFIED BY 'Admin_Pass_2026!';
 GRANT 'rol_admin' TO 'admin_user'@'%';
