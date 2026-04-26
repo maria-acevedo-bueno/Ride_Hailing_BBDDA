@@ -204,7 +204,7 @@ ORDER BY puntuacion_media DESC;
 -- Uptime del servidor MySQL.
 SHOW STATUS LIKE 'Uptime';
 
--- çConexiones activas.
+-- Conexiones activas.
 SHOW STATUS LIKE 'Threads_connected';
 
 -- Máximo de conexiones alcanzado.

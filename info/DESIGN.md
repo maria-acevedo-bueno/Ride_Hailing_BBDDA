@@ -1080,17 +1080,15 @@ En conjunto, esta solución permite:
 
 ## 6. Dashboard
 
-El archivo `dashboard.sql` contiene un conjunto de consultas para revisar el estado funcional y técnico de la base de datos `ride_hailing`.
+El dashboard contiene un conjunto de consultas para revisar el estado de la base de datos.
 
-No se trata de un dashboard gráfico, sino de un panel SQL ejecutable directamente sobre MySQL. Para ello se combinan consultas de negocio, consultas de auditoría y consultas internas del servidor mediante `SELECT`, `SHOW STATUS`, `SHOW VARIABLES`, `information_schema`, `performance_schema` y `EXPLAIN`.
+Se trata de un panel SQL ejecutable que combina consultas de negocio, auditoría e internas del servidor haciendo uso de `SELECT`, `SHOW STATUS`, `SHOW VARIABLES`, `information_schema`, `performance_schema` y `EXPLAIN`.
 
-El objetivo es poder comprobar, desde SQL, tanto el comportamiento de la plataforma como el estado operativo del servidor MySQL.
+El objetivo es poder comprobar, tanto el comportamiento de la plataforma como el estado del servidor MySQL.
 
-### 6.1 Resumen general del sistema
+### 6.1 Resumen general
 
-La primera parte del dashboard muestra un resumen global de los datos cargados en las tablas principales.
-
-Se cuentan registros de:
+La primera parte del dashboard muestra un resumen global de los datos cargados en las tablas principales:
 
 - `usuario`
 - `rider`
@@ -1102,7 +1100,7 @@ Se cuentan registros de:
 - `pago`
 - `audit_operacion`
 
-Esta consulta permite comprobar rápidamente si la base de datos contiene datos en las entidades principales del modelo.
+Esta consulta permite comprobar si la base de datos contiene datos en las entidades principales del modelo.
 
 También se incluyen dos resúmenes por estado:
 
@@ -1129,18 +1127,15 @@ El segundo bloque del dashboard contiene consultas orientadas a analizar el func
 
 La tasa de aceptación se calcula como `ofertas aceptadas / total de ofertas recibidas * 100`.
 
-Esta métrica se calcula en dos niveles:
+Esta métrica se calcula por conductor y por company.
 
-- por conductor
-- por company
-
-De esta forma se puede analizar tanto el comportamiento individual de cada conductor como el rendimiento agregado de cada company.
+De esta forma se puede analizar tanto el comportamiento individual de cada conductor como el rendimiento de cada company.
 
 Para las métricas económicas solo se consideran viajes `finalizado` y pagos `completado`. Además, se exige que existan `fecha_inicio` y `fecha_fin`, porque son necesarias para calcular la duración del viaje y los ingresos por minuto.
 
 ### 6.3 Métricas internas de MySQL
 
-El tercer bloque contiene consultas para revisar el estado técnico del servidor MySQL.
+El tercer bloque contiene consultas para revisar el estado del servidor MySQL.
 
 Se utilizan variables de estado y de configuración mediante `SHOW STATUS` y `SHOW VARIABLES`.
 
@@ -1160,8 +1155,6 @@ Se utilizan variables de estado y de configuración mediante `SHOW STATUS` y `SH
 | Queries lentas | `SHOW STATUS LIKE 'Slow_queries';` | Indica cuántas consultas han superado el umbral de lentitud. |
 | Slow query log | `SHOW VARIABLES LIKE 'slow_query_log%';` | Comprueba la configuración del registro de consultas lentas. |
 | Umbral de query lenta | `SHOW VARIABLES LIKE 'long_query_time';` | Indica a partir de cuántos segundos una consulta se considera lenta. |
-
-Estas métricas permiten detectar síntomas básicos de saturación, exceso de conexiones, actividad elevada o consultas lentas.
 
 ### 6.4 Métricas de InnoDB
 
@@ -1195,25 +1188,12 @@ Se revisan:
 - deadlocks detectados
 - transacciones activas.
 
-Para consultar transacciones activas se usa `information_schema.INNODB_TRX`:
-
-```sql
-SELECT
-    trx_id,
-    trx_state,
-    trx_started,
-    trx_query
-FROM information_schema.INNODB_TRX
-ORDER BY trx_started ASC;
-```
-
-Esta consulta ayuda a detectar transacciones largas, abiertas o bloqueadas.
-
-Es especialmente relevante en este proyecto, porque los procedimientos almacenados utilizan transacciones y bloqueos `FOR UPDATE` en operaciones críticas, como la aceptación de ofertas o el cambio de estado de un viaje.
+Para consultar transacciones activas se usa `information_schema.INNODB_TRX`. Esto ayuda a detectar transacciones largas, abiertas o bloqueadas.
+Es especialmente relevante, porque los procedimientos almacenados utilizan transacciones y bloqueos `FOR UPDATE` en operaciones críticas, como la aceptación de ofertas o el cambio de estado de un viaje.
 
 ### 6.6 Tamaño de tablas e índices
 
-También se consulta `information_schema.tables` para obtener el tamaño ocupado por cada tabla del esquema `ride_hailing`.
+También se consulta `information_schema.tables` para obtener el tamaño ocupado por cada tabla de la base de datos.
 
 La consulta muestra:
 
@@ -1247,7 +1227,7 @@ Se incluyen consultas sobre:
 | --- | --- |
 | Operaciones auditadas por tabla | Ver cuántas operaciones se han registrado por tabla y tipo de acción. |
 | Últimas operaciones auditadas | Mostrar los últimos registros generados en `audit_operacion`. |
-| Cambios de estado de viaje | Resumir las transiciones almacenadas en `viaje_estado_log. |
+| Cambios de estado de viaje | Resumir las transiciones almacenadas en `viaje_estado_log`. |
 
 Estas consultas permiten comprobar que los triggers están registrando correctamente las operaciones relevantes sobre viajes, ofertas y pagos.
 
