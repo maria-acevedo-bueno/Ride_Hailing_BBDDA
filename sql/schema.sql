@@ -189,19 +189,9 @@ CREATE TABLE IF NOT EXISTS oferta (
     estado_oferta ENUM('pendiente', 'aceptada', 'rechazada', 'expirada') DEFAULT 'pendiente' NOT NULL,
     importe_ofrecido DECIMAL(10, 2) NOT NULL,
 
-    -- Columna para impedir más de una oferta aceptada por viaje.
-    -- En MySQL los UNIQUE permiten múltiples NULL, por eso solo se rellena cuando la oferta está aceptada.
-    id_viaje_aceptado BIGINT GENERATED ALWAYS AS (
-        CASE
-            WHEN estado_oferta = 'aceptada' THEN id_viaje
-            ELSE NULL
-        END
-    ) STORED,
-
     PRIMARY KEY (id_oferta),
 
     CONSTRAINT uk_oferta_viaje_conductor UNIQUE (id_viaje, id_conductor),
-    CONSTRAINT uk_oferta_unica_aceptada_por_viaje UNIQUE (id_viaje_aceptado),
 
     CONSTRAINT fk_oferta_viaje FOREIGN KEY (id_viaje)
         REFERENCES viaje(id_viaje) ON UPDATE RESTRICT ON DELETE RESTRICT,
