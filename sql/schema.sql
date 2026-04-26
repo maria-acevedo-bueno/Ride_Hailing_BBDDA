@@ -1,3 +1,5 @@
+-- 1. CREACIÓN DE LA BASE DE DATOS
+
 -- Primero, se elimina la base de datos previa, esto nos permite reconstruir rápidamente la base de datos en caso de error en las pruebas.
 DROP DATABASE IF EXISTS ride_hailing;
 
@@ -10,6 +12,8 @@ CREATE DATABASE ride_hailing
 
 -- A partir de aquí, los comandos se escriben sobre la base de datos por lo que entramos en ella.
 USE ride_hailing;
+
+-- 2. TABLAS
 
 -- La tabla company almacena las empresas que operan en la plataforma.
 -- Cada conductor y cada vehículo pertenecen a una company.
@@ -47,14 +51,8 @@ CREATE TABLE IF NOT EXISTS usuario (
 
 ) ENGINE = InnoDB;
 
--- =========================================================
--- 2. ESPECIALIZACION DE USUARIOS
--- =========================================================
-
--- Tabla rider:
--- especializa a un usuario como cliente que solicita viajes.
--- Su clave primaria es también clave foránea a usuario.
--- Esto obliga a que un rider no pueda existir sin un usuario base.
+-- La tabla rider especializa a un usuario como cliente.
+-- Su clave primaria es también clave foránea a usuario, haciendo que un rider no pueda existir sin su usuario base.
 CREATE TABLE IF NOT EXISTS rider (
 
     id_usuario BIGINT NOT NULL,
@@ -65,12 +63,8 @@ CREATE TABLE IF NOT EXISTS rider (
 
 ) ENGINE = InnoDB;
 
--- Tabla conductor:
--- especializa a un usuario como conductor.
--- Guarda su licencia, su estado operativo y la empresa a la que pertenece.
--- El estado_conductor ayuda a controlar si puede recibir ofertas o no.
--- Se indexa id_company para búsquedas por empresa y estado_conductor
--- para búsquedas operativas frecuentes.
+-- La tabla conductor especializa a un usuario como conductor.
+-- Se crea un índice sobre id_company y estado_conductor para búsquedas más rápidas.
 CREATE TABLE IF NOT EXISTS conductor (
 
     id_usuario BIGINT NOT NULL,
@@ -92,15 +86,8 @@ CREATE TABLE IF NOT EXISTS conductor (
 
 ) ENGINE = InnoDB;
 
--- =========================================================
--- 3. GESTION DE FLOTA Y VIAJES
--- =========================================================
-
--- Tabla vehiculo:
--- almacena los vehículos gestionados por cada company.
+-- La tabla vehiculo almacena los vehículos gestionados por cada company.
 -- Un vehículo puede ser asignado a diferentes conductores a lo largo del tiempo.
--- La matrícula se define como única porque identifica de forma natural al vehículo.
--- capacidad > 0 evita datos imposibles o incoherentes.
 CREATE TABLE IF NOT EXISTS vehiculo (
 
     id_vehiculo BIGINT NOT NULL AUTO_INCREMENT,
@@ -122,18 +109,15 @@ CREATE TABLE IF NOT EXISTS vehiculo (
 
 ) ENGINE = InnoDB;
 
--- Tabla conductor_vehiculo:
--- resuelve la relación N:N entre conductores y vehículos.
+-- Tabla conductor_vehiculo es el enlace N:N entre conductores y vehículos.
 -- Permite registrar asignaciones históricas y saber cuál está vigente.
--- Si fecha_hasta es NULL, la asignación sigue activa.
--- La PK compuesta impide duplicar exactamente la misma asignación temporal.
--- Los índices con fecha_hasta ayudan a localizar asignaciones actuales.
+-- Los índices con fecha_hasta ayudan a localizar asignaciones vigentes actualmente.
 CREATE TABLE IF NOT EXISTS conductor_vehiculo (
 
     id_conductor BIGINT NOT NULL,
     id_vehiculo BIGINT NOT NULL,
     fecha_desde DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    fecha_hasta DATETIME NULL,
+    fecha_hasta DATETIME NULL, -- Si fecha_hasta es NULL, la asignación sigue activa.
 
     PRIMARY KEY (id_conductor, id_vehiculo, fecha_desde),
 
@@ -147,15 +131,9 @@ CREATE TABLE IF NOT EXISTS conductor_vehiculo (
 
 ) ENGINE = InnoDB;
 
--- Tabla viaje:
--- representa el ciclo de vida completo de un trayecto.
--- Empieza solicitado, puede ser aceptado, iniciado, finalizado o cancelado.
--- Guarda rider, conductor, vehículo, tiempos y datos de origen y destino.
--- id_conductor e id_vehiculo se permiten NULL al inicio porque un viaje
--- puede existir antes de que alguien lo acepte.
--- Se añaden CHECK para validar coordenadas geográficas y distancia.
--- Los índices responden a las consultas más probables del sistema:
--- por estado, por conductor y por rider.
+-- La tabla viaje representa el ciclo de vida completo de un trayecto.
+-- id_conductor e id_vehiculo se permiten NULL al inicio porque un viaje puede existir antes de que alguien lo acepte.
+-- Los índices responden a las consultas más probables del sistema, búsquedas por estado, conductor y rider.
 CREATE TABLE IF NOT EXISTS viaje (
 
     id_viaje BIGINT NOT NULL AUTO_INCREMENT,
@@ -197,12 +175,10 @@ CREATE TABLE IF NOT EXISTS viaje (
 
 ) ENGINE = InnoDB;
 
--- Tabla oferta:
--- registra las ofertas enviadas a los conductores para un viaje.
+-- La tabla oferta registra las ofertas enviadas a los conductores para un viaje.
 -- Para un mismo viaje se pueden generar varias ofertas, pero solo una termina aceptada.
 -- La restricción UNIQUE evita que el mismo conductor reciba dos veces el mismo viaje.
--- La columna generada id_viaje_aceptado refuerza a nivel de BD que solo pueda
--- existir una oferta aceptada por viaje.
+-- La columna generada id_viaje_aceptado refuerza a nivel de BD que solo pueda existir una oferta aceptada por viaje.
 CREATE TABLE IF NOT EXISTS oferta (
 
     id_oferta BIGINT NOT NULL AUTO_INCREMENT,
@@ -213,9 +189,8 @@ CREATE TABLE IF NOT EXISTS oferta (
     estado_oferta ENUM('pendiente', 'aceptada', 'rechazada', 'expirada') DEFAULT 'pendiente' NOT NULL,
     importe_ofrecido DECIMAL(10, 2) NOT NULL,
 
-    -- Columna generada para impedir más de una oferta aceptada por viaje.
-    -- En MySQL los UNIQUE permiten múltiples NULL, por eso solo se rellena
-    -- cuando la oferta está aceptada.
+    -- Columna para impedir más de una oferta aceptada por viaje.
+    -- En MySQL los UNIQUE permiten múltiples NULL, por eso solo se rellena cuando la oferta está aceptada.
     id_viaje_aceptado BIGINT GENERATED ALWAYS AS (
         CASE
             WHEN estado_oferta = 'aceptada' THEN id_viaje
@@ -242,16 +217,9 @@ CREATE TABLE IF NOT EXISTS oferta (
 
 ) ENGINE = InnoDB;
 
--- =========================================================
--- 4. ECONOMIA Y VALORACIONES
--- =========================================================
-
--- Tabla pago:
--- guarda la liquidación económica final de un viaje.
+-- La tabla pago guarda la información económica de un viaje.
 -- Cada viaje puede tener como máximo un pago asociado.
--- El CHECK principal garantiza consistencia contable:
--- total = comisión + importe del conductor.
--- Se usa tolerancia con ABS(... ) < 0.01 para evitar problemas de redondeo.
+-- El CHECK garantiza consistencia contable, se usa ABS para evitar problemas de redondeo.
 CREATE TABLE IF NOT EXISTS pago (
 
     id_pago BIGINT NOT NULL AUTO_INCREMENT,
@@ -268,7 +236,7 @@ CREATE TABLE IF NOT EXISTS pago (
     CONSTRAINT fk_pago_viaje FOREIGN KEY (id_viaje)
         REFERENCES viaje(id_viaje) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT ck_pago_sumas CHECK (
-        ABS(importe_total - (comision_company + importe_conductor)) < 0.01
+        ABS(importe_total - (comision_company + importe_conductor)) < 0.01 -- total = comisión + importe del conductor.
     ),
     CONSTRAINT ck_pago_total CHECK (importe_total >= 0),
     CONSTRAINT ck_pago_comision CHECK (comision_company >= 0),
@@ -278,11 +246,9 @@ CREATE TABLE IF NOT EXISTS pago (
 
 ) ENGINE = InnoDB;
 
--- Tabla valoracion:
--- almacena las valoraciones emitidas por los usuarios al finalizar un viaje.
--- Permite valorar tanto al rider como al conductor.
--- La puntuación se restringe entre 1 y 5.
--- Se indexa el usuario valorado para explotar métricas y rankings.
+-- En la tabla valoración se almacenan las valoraciones emitidas por los usuarios al finalizar un viaje.
+-- Se permite valorar tanto al rider como al conductor con una puntuación entre 1 y 5.
+-- Se crea un índice de usuario valorado para acceder mejor a métricas.
 CREATE TABLE IF NOT EXISTS valoracion (
 
     id_valoracion BIGINT NOT NULL AUTO_INCREMENT,
@@ -306,14 +272,8 @@ CREATE TABLE IF NOT EXISTS valoracion (
 
 ) ENGINE = InnoDB;
 
--- =========================================================
--- 5. AUDITORIA
--- =========================================================
-
--- Tabla viaje_estado_log:
--- almacena el historial de cambios de estado de los viajes.
--- Se alimenta automáticamente mediante un trigger de auditoría.
--- Sirve tanto para trazabilidad funcional como para análisis posteriores.
+-- La tabla viaje_estado_log almacena el historial de cambios de estado de los viajes.
+-- Se modifica automáticamente haciendo uso de un trigger.
 CREATE TABLE IF NOT EXISTS viaje_estado_log (
 
     id_historial BIGINT NOT NULL AUTO_INCREMENT,
@@ -331,10 +291,7 @@ CREATE TABLE IF NOT EXISTS viaje_estado_log (
 
 ) ENGINE = InnoDB;
 
--- Tabla audit_operacion:
--- auditoría básica de operaciones críticas sobre viajes, ofertas y pagos.
--- Complementa a viaje_estado_log porque no solo guarda transiciones de estado,
--- sino también inserciones y actualizaciones relevantes para trazabilidad.
+-- La tabla audit_operacion se usa como log de operaciones críticas sobre viajes, ofertas y pagos (INSERT UPDATE Y DELETE).
 CREATE TABLE IF NOT EXISTS audit_operacion (
 
     id_audit BIGINT NOT NULL AUTO_INCREMENT,
@@ -352,16 +309,14 @@ CREATE TABLE IF NOT EXISTS audit_operacion (
 
 ) ENGINE = InnoDB;
 
--- =========================================================
--- 6. PROCEDIMIENTOS ALMACENADOS
--- =========================================================
+-- 3. PROCEDIMIENTOS ALMACENADOS
 
 DROP PROCEDURE IF EXISTS sp_solicitar_viaje;
 DELIMITER $$
 
--- Procedimiento sp_solicitar_viaje:
--- crea un viaje nuevo y genera automáticamente ofertas para
+-- sp_solicitar_viaje crea un viaje nuevo y genera automáticamente ofertas para 
 -- los conductores disponibles con vehículo activo y asignación vigente.
+
 CREATE PROCEDURE sp_solicitar_viaje(
     IN p_id_rider BIGINT,
     IN p_origen_lat DECIMAL(9,6),
@@ -891,9 +846,7 @@ END$$
 
 DELIMITER ;
 
--- =========================================================
--- 7. TRIGGERS
--- =========================================================
+-- 4. TRIGGERS
 
 DROP TRIGGER IF EXISTS tr_audit_viaje_estado;
 DELIMITER $$
