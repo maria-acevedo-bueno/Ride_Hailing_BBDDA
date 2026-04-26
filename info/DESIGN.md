@@ -521,124 +521,35 @@ Cada rol representa un perfil distinto dentro del sistema.
 
 #### `rol_admin`
 
-El rol `rol_admin` tiene control total sobre el esquema `ride_hailing`:
+El rol `rol_admin` tiene control total sobre la base de datos.
 
-```sql
-GRANT ALL PRIVILEGES ON ride_hailing.* TO 'rol_admin';
-```
-
-Está pensado para tareas de administración, mantenimiento y gestión completa de la base de datos. Es el rol con más permisos, por lo que no debe usarse para la aplicación ni para consultas normales.
-
-Usuario asociado:
-
-```sql
-'admin_user'@'%'
-```
+Es el rol con más permisos, por lo que no debe usarse para la aplicación ni para consultas normales.
 
 #### `rol_app`
 
 El rol `rol_app` está pensado para el usuario que utiliza la aplicación backend.
 
-Este rol puede consultar vistas operativas:
-
-```sql
-v_conductores_disponibles
-v_viajes_operativos
-v_ofertas_operativas
-```
-
-También puede insertar valoraciones directamente en la tabla `valoracion`:
-
-```sql
-GRANT INSERT ON ride_hailing.valoracion TO 'rol_app';
-```
-
-Sin embargo, no tiene permisos directos para modificar tablas críticas como `viaje`, `oferta` o `pago`. Las operaciones principales del negocio se hacen mediante procedimientos almacenados:
-
-```sql
-sp_solicitar_viaje
-sp_aceptar_oferta
-sp_iniciar_viaje
-sp_finalizar_viaje_y_pagar
-```
-
-Esto es importante porque obliga a que la aplicación use la lógica controlada de la base de datos. Así, la aceptación de ofertas, el cambio de estado de viajes y la generación de pagos se realizan mediante procedimientos que incluyen validaciones, transacciones y control de concurrencia.
-
-Usuario asociado:
-
-```sql
-'backend_user'@'%'
-```
+Este rol puede consultar las vistas que tiene asignadas, insertar valoraciones y ejecutar los procedimientos almacenados para realizar el flujo de datos dentro de la base de datos.
 
 #### `rol_analista`
 
-El rol `rol_analista` está pensado para consultas de análisis, métricas e informes.
+El rol `rol_analista` está pensado para consultas de análisis y métricas.
 
-Tiene permisos de solo lectura sobre vistas preparadas para analítica:
+Tiene permisos de solo lectura sobre vistas preparadas con datos relevantes para el análisis de los mismos y la detección de problemas tanto a nivel de app como de usuario.
 
-```sql
-v_usuarios_anonimizados
-v_pagos_analitica
-v_viaje_estado_log_resumen
-v_viajes_operativos
-v_auditoria_operaciones
-```
-
-Este rol permite consultar información útil para el análisis del sistema, pero sin acceder directamente a datos personales sensibles ni modificar información.
-
-Usuario asociado:
-
-```sql
-'analyst_user'@'%'
-```
+Este rol puede consultar información útil para el análisis del sistema, pero sin acceder directamente a datos personales sensibles ni modificar información.
 
 #### `rol_readonly`
 
-El rol `rol_readonly` permite consultar información general del sistema sin capacidad de escritura.
+El rol `rol_readonly` permite consultar información básica y general del sistema sin capacidad de escritura ni modificación.
 
-Tiene acceso de lectura a vistas operativas, analíticas y de auditoría:
+Tiene únicamente acceso de lectura a vistas operativas que le han sido asignadas.
 
-```sql
-v_usuarios_anonimizados
-v_conductores_disponibles
-v_viajes_operativos
-v_ofertas_operativas
-v_pagos_analitica
-v_viaje_estado_log_resumen
-v_auditoria_operaciones
-```
-
-Este rol está pensado para usuarios que solo necesitan revisar datos, por ejemplo para soporte, supervisión o consultas funcionales.
-
-Usuario asociado:
-
-```sql
-'readonly_user'@'%'
-```
+Este rol está pensado para usuarios que solo necesitan revisar datos de una manera simple y rápida.
 
 #### `rol_backup`
 
-El rol `rol_backup` está pensado para realizar copias de seguridad de la base de datos.
-
-Tiene permisos sobre el esquema `ride_hailing` para leer los datos y los objetos necesarios durante un backup lógico:
-
-```sql
-SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES
-```
-
-Además, tiene algunos privilegios globales necesarios para tareas de backup y recuperación:
-
-```sql
-RELOAD, PROCESS, REPLICATION CLIENT
-```
-
-Estos permisos permiten realizar copias con herramientas como `mysqldump`, incluyendo vistas, triggers y otros objetos relevantes.
-
-Usuario asociado:
-
-```sql
-'backup_user'@'%'
-```
+El rol `rol_backup` tiene permisos que le permiten crear y restaurar copias de seguridad de la base de datos y de la información que contiene.
 
 ### 3.2 Usuarios creados
 
@@ -650,33 +561,11 @@ El script crea un usuario para cada rol:
 | `backend_user`  | `rol_app`      | Usuario utilizado por la aplicación backend.     |
 | `analyst_user`  | `rol_analista` | Consultas analíticas y métricas.                 |
 | `readonly_user` | `rol_readonly` | Consulta general sin permisos de escritura.      |
-| `backup_user`   | `rol_backup`   | Realización de backups y soporte a recuperación. |
+| `backup_user`   | `rol_backup`   | Creación de backups y soporte a recuperación. |
 
-A cada usuario se le asigna su rol correspondiente mediante `GRANT`:
+A cada usuario se le asigna su rol correspondiente mediante `GRANT`.
 
-```sql
-GRANT 'rol_app' TO 'backend_user'@'%';
-```
-
-Además, se establece el rol como rol por defecto:
-
-```sql
-SET DEFAULT ROLE 'rol_app' TO 'backend_user'@'%';
-```
-
-Esto permite que el usuario tenga activo su rol automáticamente al iniciar sesión, sin tener que ejecutar manualmente `SET ROLE`.
-
-### 3.3 Justificación del diseño de seguridad
-
-El diseño de permisos se basa en tres decisiones principales.
-
-Primero, se separan las responsabilidades. Cada usuario tiene una función concreta: administración, aplicación, análisis, consulta o backup.
-
-Segundo, se aplica el principio de mínimos privilegios. Por ejemplo, el usuario de la aplicación no tiene permisos totales sobre la base de datos, sino solo los necesarios para consultar vistas, insertar valoraciones y ejecutar procedimientos almacenados.
-
-Tercero, se usan vistas para controlar la exposición de datos. Los usuarios de análisis y solo lectura no acceden directamente a todas las tablas, sino a vistas preparadas para su función. Esto permite ocultar información sensible y reducir el riesgo de accesos indebidos.
-
-En conjunto, esta configuración protege las tablas principales del sistema y obliga a que las operaciones críticas se realicen de forma controlada mediante procedimientos almacenados.
+Además, se establece el rol como rol por defecto haciendo uso de `SET DEFAULT ROLE`. Esto permite que el usuario tenga activo su rol automáticamente al iniciar sesión, sin tener que ejecutar manualmente `SET ROLE`.
 
 ## 4. Vistas e Índices
 
