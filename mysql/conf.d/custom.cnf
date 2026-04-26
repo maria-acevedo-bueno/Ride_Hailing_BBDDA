@@ -1,50 +1,41 @@
 [mysqld]
 
-# STRICT_TRANS_TABLES: hace que MySQL rechace datos inválidos.
-# ERROR_FOR_DIVISION_BY_ZERO: convierte divisiones por cero en error.
-# NO_ENGINE_SUBSTITUTION: evita que MySQL cambie de motor de almacenamiento por otro
-# en caso de que el que pediste no esté disponible.
+# STRICT_TRANS_TABLES rechaza datos inválidos.
+# ERROR_FOR_DIVISION_BY_ZERO trata la división por cero como error.
+# NO_ENGINE_SUBSTITUTION evita cambiar automáticamente el motor de almacenamiento.
 sql_mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
 
-# Error log detallado.
+# Aumenta el detalle del log de errores.
 log_error_verbosity=3
 
-# En caso de que una query supere 0.5 segundos,
-# se almacena en el log de queries lentas.
+# Activa el log de consultas lentas.
+# Registra consultas de más de 0.5 segundos.
 slow_query_log=1
 long_query_time=0.5
 
-# Tamaño del buffer pool de InnoDB.
-# Para una práctica universitaria 256M es suficiente.
+# Memoria usada por InnoDB para datos e índices.
 innodb_buffer_pool_size=256M
 
-# 200 conexiones concurrentes máximo.
-# Para una tarea universitaria es suficiente; para un entorno real habría que dimensionarlo.
+# Límite de conexiones simultáneas a la base de datos.
 max_connections=200
 
-# MySQL fuerza el flush del redo log en cada COMMIT.
-# Mejora la durabilidad de las transacciones confirmadas.
+# Fuerza escritura del redo log en cada COMMIT de transacción.
 innodb_flush_log_at_trx_commit=1
 
-# Identificador del servidor.
-# Es necesario si se activa binary log y también sería obligatorio en replicación.
+# Identificador del servidor MySQL.
 server_id=1
 
-# Activamos el binary log para registrar cambios de datos.
-# Sirve como base para recuperación PITR y para replicación.
+# Activa el binary log.
 log_bin=mysql-bin
 
-# Formato recomendado para binlog porque registra cambios fila a fila.
-# Es más seguro para recuperación y replicación que STATEMENT en muchos casos.
+# Guarda cambios fila a fila en el binlog.
 binlog_format=ROW
 
-# El binlog se sincroniza con disco en cada commit.
-# Reduce riesgo de pérdida de cambios confirmados ante caída.
+# Sincroniza el binlog en cada COMMIT.
 sync_binlog=1
 
-# Los binlogs se conservarán durante 7 días.
-# Debe estar alineado con la política de backup.
+# Conserva los binlogs durante 7 días.
 binlog_expire_logs_seconds=604800
 
-# Habilita performance_schema para métricas, locks y diagnóstico.
+# Activa métricas internas de MySQL.
 performance_schema=1
