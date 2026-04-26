@@ -4,19 +4,13 @@
 
 Para desplegar la base de datos se ha usado Docker Compose. El objetivo es poder levantar MySQL 8 de forma sencilla y reproducible, sin depender de una instalación local.
 
-El servicio principal es `mysql`, basado en la imagen oficial `mysql:8.0`:
+El servicio principal es `mysql`, basado en la imagen `mysql:8.0`:
 
 ```yaml
 services:
   mysql:
     image: mysql:8.0
     container_name: mysql8
-```
-
-Se ha fijado el nombre del contenedor como mysql8 para facilitar comandos de administración, por ejemplo:
-
-```
-docker exec -it mysql8 mysql -uroot -p
 ```
 
 También se ha configurado:

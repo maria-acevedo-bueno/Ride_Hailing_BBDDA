@@ -1,24 +1,24 @@
 services:
-  # Base de Datos Principal
+
   mysql:
     image: mysql:8.0
     container_name: mysql8
-    restart: unless-stopped
+    # El contenedor se reiniciará en caso de que se pare por alguna razón que no sea el administrador
+    restart: unless-stopped 
     ports:
-      # Puerto host:contenedor.
-      # Permite conectar desde la máquina local usando 127.0.0.1:3306.
+      # host:contenedor, permite conectar desde la máquina local usando 127.0.0.1:3306.
       - "3306:3306"
     environment:
-      # Credenciales iniciales para levantar la BD vacía.
-      # Usuarios más restrictivos se crean con scripts SQL.
+      # Credenciales iniciales para levantar la base de datos.
+      # Usuarios más restrictivos se crean dentro del archivo permissions.sql
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      # Guardamos los datos en un volumen para no perderlos si borramos el contenedor.
+      # Guardamos los datos en un volumen para no perderlos si paramos el contenedor (persistencia)
       - mysql_data:/var/lib/mysql
-      # Montamos nuestra configuración personalizada en solo lectura.
+      # Montamos nuestra configuración personalizada en solo lectura (custom.cnf).
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     healthcheck:
       # Comprobamos que MySQL está realmente listo.

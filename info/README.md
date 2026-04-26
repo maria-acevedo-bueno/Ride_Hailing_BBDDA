@@ -1,21 +1,14 @@
 # CÓMO OPERAR SOBRE LA BASE DE DATOS
 
-Este documento recoge las instrucciones para arrancar la base de datos, cargar los datos de prueba y ejecutar los scripts principales del proyecto.
+Este documento agrupa los comandos necesarios para iniciar la base de datos, cargar los datos de prueba y ejecutar los archivos .sql principales del proyecto.
 
 ## 1. Requisitos previos
 
 Antes de empezar, comprobar que Docker y Docker Compose están instalados.
 
-En Bash:
+En Bash/PowerShell:
 
 ```bash
-docker --version
-docker compose version
-```
-
-En PowerShell:
-
-```powershell
 docker --version
 docker compose version
 ```
@@ -24,57 +17,33 @@ docker compose version
 
 Desde la carpeta raíz del proyecto, ejecutar:
 
-En Bash:
+En Bash/PowerShell:
 
 ```bash
-docker compose up -d
-```
-
-En PowerShell:
-
-```powershell
 docker compose up -d
 ```
 
 Comprobar que el contenedor está levantado:
 
-En Bash:
+En Bash/Powershell:
 
 ```bash
-docker compose ps
-```
-
-En PowerShell:
-
-```powershell
 docker compose ps
 ```
 
 Ver los logs de MySQL:
 
-En Bash:
+En Bash/Powershell:
 
 ```bash
-docker compose logs -f mysql
-```
-
-En PowerShell:
-
-```powershell
 docker compose logs -f mysql
 ```
 
 Comprobar que MySQL está listo:
 
-En Bash:
+En Bash/PowerShell:
 
 ```bash
-docker exec -it mysql8 mysqladmin ping -h 127.0.0.1 -uroot -prootpass
-```
-
-En PowerShell:
-
-```powershell
 docker exec -it mysql8 mysqladmin ping -h 127.0.0.1 -uroot -prootpass
 ```
 
@@ -90,29 +59,17 @@ la base de datos está preparada para usarse.
 
 ### 3.1 Conectarse desde dentro del contenedor
 
-En Bash:
+En Bash/PowerShell:
 
 ```bash
-docker exec -it mysql8 mysql -uroot -prootpass
-```
-
-En PowerShell:
-
-```powershell
 docker exec -it mysql8 mysql -uroot -prootpass
 ```
 
 ### 3.2 Conectarse desde la máquina local
 
-En Bash:
+En Bash/PowerShell:
 
 ```bash
-mysql -h 127.0.0.1 -P 3306 -uroot -p
-```
-
-En PowerShell:
-
-```powershell
 mysql -h 127.0.0.1 -P 3306 -uroot -p
 ```
 
