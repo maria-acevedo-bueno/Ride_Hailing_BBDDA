@@ -93,7 +93,7 @@ Esto evita considerar el contenedor como operativo antes de que el servidor MySQ
 
 ### 2.1 Diagrama Entidad-Relación (MER)
 
-El siguiente diagrama ilustra la arquitectura de datos, destacando las relaciones de cardinalidad, la especialización de usuarios y el flujo de los viajes y pagos.
+El siguiente diagrama muestra la estructura de la base de datos, destacando las relaciones, la especialización de usuarios y el flujo de los viajes y pagos.
 
 ```mermaid
 erDiagram

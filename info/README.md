@@ -292,37 +292,33 @@ docker exec mysql8 mysqldump `
 
 ### 8.2 Restaurar backup
 
+En el nombre del archivo de backup, añadir la fecha que aparezca en el nombre del backup creado para cada comando
+
 En Bash:
 
 ```bash
-cat backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+cat backup_ride_hailing_*.sql | docker exec -i mysql8 mysql -uroot -prootpass
 ```
 
 O también:
 
 ```bash
-docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
+docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing_*.sql
 ```
 
 En PowerShell:
 
 ```powershell
-Get-Content -Raw .\backup_ride_hailing.sql | docker exec -i mysql8 mysql -uroot -prootpass
+Get-Content -Raw .\backup_ride_hailing_*.sql | docker exec -i mysql8 mysql -uroot -prootpass
 ```
 
 ## 9. Parar o borrar el entorno
 
 ### 9.1 Parar el proyecto sin borrar datos
 
-En Bash:
+En Bash/PowerShell:
 
 ```bash
-docker compose down
-```
-
-En PowerShell:
-
-```powershell
 docker compose down
 ```
 
@@ -330,15 +326,9 @@ Los datos se conservan porque están guardados en el volumen de Docker.
 
 ### 9.2 Borrar contenedor y datos
 
-En Bash:
+En Bash/Powershell:
 
 ```bash
-docker compose down -v
-```
-
-En PowerShell:
-
-```powershell
 docker compose down -v
 ```
 
