@@ -477,6 +477,28 @@ Cada registro incluye la tabla afectada, el identificador del registro, la acci�
 
 Esta tabla no tiene claves foráneas directas hacia las tablas auditadas, porque usa un modelo genérico basado en `tabla_afectada` e `id_registro`. Esto permite auditar operaciones de distintas tablas dentro de una misma estructura.
 
+### 2.3 Relaciones entre tablas
+
+Las relaciones principales de la base de datos se pueden resumir mediante las siguientes cardinalidades:
+
+| Relación | Cardinalidad | Descripción |
+| --- | --- | --- |
+| `company` — `conductor` | 1:N | Una company puede tener muchos conductores, pero cada conductor pertenece a una única company. |
+| `company` — `vehiculo` | 1:N | Una company puede gestionar muchos vehículos, pero cada vehículo pertenece a una única company. |
+| `usuario` — `rider` | 1:0..1 | Un usuario puede ser rider o no serlo. Cada rider debe existir previamente como usuario. |
+| `usuario` — `conductor` | 1:0..1 | Un usuario puede ser conductor o no serlo. Cada conductor debe existir previamente como usuario. |
+| `conductor` — `vehiculo` | N:M | Un conductor puede usar varios vehículos y un vehículo puede estar asignado a varios conductores. Se resuelve mediante `conductor_vehiculo`. |
+| `rider` — `viaje` | 1:N | Un rider puede solicitar muchos viajes, pero cada viaje pertenece a un único rider. |
+| `conductor` — `viaje` | 1:N opcional | Un conductor puede realizar muchos viajes, pero un viaje puede no tener conductor al principio. |
+| `vehiculo` — `viaje` | 1:N opcional | Un vehículo puede utilizarse en muchos viajes, pero un viaje puede no tener vehículo al principio. |
+| `viaje` — `oferta` | 1:N | Un viaje puede generar varias ofertas, pero cada oferta pertenece a un único viaje. |
+| `conductor` — `oferta` | 1:N | Un conductor puede recibir muchas ofertas, pero cada oferta se envía a un único conductor. |
+| `viaje` — `pago` | 1:0..1 | Un viaje puede tener como máximo un pago asociado. |
+| `viaje` — `valoracion` | 1:N | Un viaje puede tener varias valoraciones asociadas. |
+| `usuario` — `valoracion` | 1:N | Un usuario puede emitir y recibir muchas valoraciones. |
+| `viaje` — `viaje_estado_log` | 1:N | Un viaje puede tener varios registros de cambio de estado. |
+| `audit_operacion` — tablas auditadas | Relación lógica | No usa claves foráneas directas; identifica la tabla y el registro mediante `tabla_afectada` e `id_registro`. |
+
 ## 3. Roles y permisos
 
 La seguridad de la base de datos se ha organizado mediante roles de MySQL. En lugar de conceder permisos directamente a cada usuario, se definen roles con permisos concretos y después se asignan esos roles a usuarios específicos.
