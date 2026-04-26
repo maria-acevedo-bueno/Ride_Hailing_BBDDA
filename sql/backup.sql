@@ -28,27 +28,29 @@ USE ride_hailing;
 -- Incluye la base de datos, procedimientos, triggers y eventos.
 -- Se usa --single-transaction para obtener un snapshot consistente con InnoDB sin bloquear las tablas durante toda la copia.
 
--- docker exec mysql8 mysqldump \
---   -ubackup_user -pBackup_Pass_2026! \
---   --databases ride_hailing \
---   --single-transaction \
---   --routines --triggers --events \
---   --set-gtid-purged=OFF \
---   > backup_ride_hailing_$(date +%Y%m%d).sql
+/* 
+   docker exec mysql8 mysqldump \
+   -ubackup_user -pBackup_Pass_2026! \
+   --databases ride_hailing \
+   --single-transaction \
+   --routines --triggers --events \
+   --set-gtid-purged=OFF \> backup_ride_hailing_$(date +%Y%m%d).sql
+*/
 
 -- 3. BACKUP COMPLETO DEL SERVIDOR:
 -- Incluye todas las bases de datos.
 -- En un entorno real permite incluir también la base mysql, donde están usuarios y privilegios.
 -- Se debe ejecutar en terminal.
 
--- docker exec mysql8 mysqldump \
---   -ubackup_user -pBackup_Pass_2026! \
---   --all-databases \
---   --single-transaction \
---   --routines --triggers --events \
---   --set-gtid-purged=OFF \
---   > backup_full_$(date +%Y%m%d).sql
-
+/* 
+   docker exec mysql8 mysqldump \
+   -ubackup_user -pBackup_Pass_2026! \
+   --all-databases \
+   --single-transaction \
+   --routines --triggers --events \
+   --set-gtid-purged=OFF \
+   > backup_full_$(date +%Y%m%d).sql
+*/
 -- Además:
 -- Si el usuario backup_user no tuviera permisos suficientes para exportar todas las bases de datos del servidor, el backup completo debería ejecutarse con una cuenta administrativa. 
 -- Para la práctica, el backup principal es el del esquema ride_hailing.
@@ -59,24 +61,25 @@ USE ride_hailing;
 -- Incluye audit_operacion, porque forma parte de la auditoría básica.
 -- También se debe ejecutar en terminal.
 
--- docker exec mysql8 mysqldump \
---   -ubackup_user -pBackup_Pass_2026! \
---   --single-transaction \
---   ride_hailing \
---   company \
---   usuario \
---   rider \
---   conductor \
---   vehiculo \
---   conductor_vehiculo \
---   viaje \
---   oferta \
---   pago \
---   valoracion \
---   viaje_estado_log \
---   audit_operacion \
---   > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
-
+/* 
+   docker exec mysql8 mysqldump \
+   -ubackup_user -pBackup_Pass_2026! \
+   --single-transaction \
+   ride_hailing \
+   company \
+   usuario \
+   rider \
+   conductor \
+   vehiculo \
+   conductor_vehiculo \
+   viaje \
+   oferta \
+   pago \
+   valoracion \
+   viaje_estado_log \
+   audit_operacion \
+   > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
+*/
 
 -- 5. RESTAURAR UN BACKUP:
 -- Ejecutar en terminal.
@@ -161,30 +164,31 @@ SHOW BINARY LOGS;
 
 -- 2) Extraer cambios hasta antes del error.
 -- El nombre del archivo coincide con log_bin=mysql-bin del custom.cnf:
--- docker exec mysql8 mysqlbinlog \
---   --start-datetime="2026-04-25 10:00:00" \
---   --stop-datetime="2026-04-25 10:29:59" \
---   /var/lib/mysql/mysql-bin.000001 > cambios.sql
-
+/* 
+   docker exec mysql8 mysqlbinlog \
+   --start-datetime="2026-04-25 10:00:00" \
+   --stop-datetime="2026-04-25 10:29:59" \
+   /var/lib/mysql/mysql-bin.000001 > cambios.sql
+*/
 -- 3) Aplicar cambios:
 -- cat cambios.sql | docker exec -i mysql8 mysql -uroot -prootpas
 
 -- 9. BUSCAR UNA OPERACIÓN EN EL BINLOG:
 -- Ejemplo para localizar un DELETE.
 -- Ejecutar en terminal.
-
--- docker exec mysql8 mysqlbinlog \
---   --start-datetime="2026-04-25 10:25:00" \
---   --stop-datetime="2026-04-25 10:35:00" \
---   /var/lib/mysql/mysql-bin.000001 | grep -A5 -B5 "DELETE"
-
+/*
+   docker exec mysql8 mysqlbinlog \
+   --start-datetime="2026-04-25 10:25:00" \
+   --stop-datetime="2026-04-25 10:35:00" \
+   /var/lib/mysql/mysql-bin.000001 | grep -A5 -B5 "DELETE"
+*/
 -- También se puede recuperar por posiciones:
-
--- docker exec mysql8 mysqlbinlog \
---   --start-position=154 \
---   --stop-position=12345 \
---   /var/lib/mysql/mysql-bin.000001 > cambios.sql
-
+/*
+   docker exec mysql8 mysqlbinlog \
+   --start-position=154 \
+   --stop-position=12345 \
+   /var/lib/mysql/mysql-bin.000001 > cambios.sql
+*/
 -- 10. SNAPSHOT CONSISTENTE:
 -- Los snapshots pueden ser inconsistentes si MySQL está escribiendo.
 -- Para coordinarlo, se puede bloquear brevemente la lectura de tablas.
@@ -202,31 +206,32 @@ SHOW BINARY LOGS;
 -- 11. SCRIPT DE BACKUP CON ROTACIÓN:
 -- Guardar como backup_mysql.sh.
 -- Se ejecuta desde el sistema, no desde MySQL.
+/*
+   #!/bin/bash
+   FECHA=$(date +%Y%m%d_%H%M%S)
+   BACKUP_DIR="/backups/mysql"
+   RETENTION_DAYS=7
 
--- #!/bin/bash
--- FECHA=$(date +%Y%m%d_%H%M%S)
--- BACKUP_DIR="/backups/mysql"
--- RETENTION_DAYS=7
---
--- mkdir -p "${BACKUP_DIR}"
---
--- docker exec mysql8 mysqldump \
---   -ubackup_user -pBackup_Pass_2026! \
---   --databases ride_hailing \
---   --single-transaction \
---   --routines --triggers --events \
---   --set-gtid-purged=OFF \
---   | gzip > "${BACKUP_DIR}/backup_ride_hailing_${FECHA}.sql.gz"
---
--- if [ $? -eq 0 ]; then
---   echo "Backup creado: backup_ride_hailing_${FECHA}.sql.gz"
--- else
---   echo "ERROR: Backup falló" >&2
---   exit 1
--- fi
---
--- find "${BACKUP_DIR}" -name "backup_ride_hailing_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
--- echo "Backups con más de ${RETENTION_DAYS} días eliminados"
+   mkdir -p "${BACKUP_DIR}"
+
+   docker exec mysql8 mysqldump \
+   -ubackup_user -pBackup_Pass_2026! \
+   --databases ride_hailing \
+   --single-transaction \
+   --routines --triggers --events \
+   --set-gtid-purged=OFF \
+   | gzip > "${BACKUP_DIR}/backup_ride_hailing_${FECHA}.sql.gz"
+
+   if [ $? -eq 0 ]; then
+     echo "Backup creado: backup_ride_hailing_${FECHA}.sql.gz"
+   else
+     echo "ERROR: Backup falló" >&2
+     exit 1
+   fi
+
+   find "${BACKUP_DIR}" -name "backup_ride_hailing_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
+   echo "Backups con más de ${RETENTION_DAYS} días eliminados"
+*/
 
 -- Programar backup diario a las 3:00:
 -- crontab -e
