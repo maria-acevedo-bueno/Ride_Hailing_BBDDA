@@ -845,10 +845,10 @@ ROUND(p_distancia_km * 1.50, 2)
 
 A continuación, genera ofertas para los conductores que cumplan todas estas condiciones:
 
-* El conductor está en estado `disponible`.
-* Tiene una asignación vigente en `conductor_vehiculo`.
-* El vehículo asignado está activo.
-* El vehículo pertenece a la misma `company` que el conductor.
+- El conductor está en estado `disponible`.
+- Tiene una asignación vigente en `conductor_vehiculo`.
+- El vehículo asignado está activo.
+- El vehículo pertenece a la misma `company` que el conductor.
 
 Si no se genera ninguna oferta, se hace `ROLLBACK` y el viaje no queda creado. Si se genera al menos una oferta, se confirma la operación con `COMMIT`.
 
@@ -880,14 +880,14 @@ Este bloqueo hace que, si dos sesiones intentan aceptar el mismo viaje al mismo 
 
 Después, el procedimiento comprueba que:
 
-* El viaje existe.
-* El viaje está en estado `solicitado`.
-* Existe una oferta pendiente para ese conductor.
-* El vehículo indicado está asignado al conductor.
-* La asignación del vehículo está vigente.
-* El vehículo está activo.
-* El conductor sigue estando disponible.
-* El conductor y el vehículo pertenecen a la misma `company`.
+- El viaje existe.
+- El viaje está en estado `solicitado`.
+- Existe una oferta pendiente para ese conductor.
+- El vehículo indicado está asignado al conductor.
+- La asignación del vehículo está vigente.
+- El vehículo está activo.
+- El conductor sigue estando disponible.
+- El conductor y el vehículo pertenecen a la misma `company`.
 
 Si todas las condiciones se cumplen, el procedimiento realiza estos cambios dentro de la misma transacción:
 
@@ -918,10 +918,10 @@ Este procedimiento cambia un viaje de estado `aceptado` a estado `en_curso`.
 
 Antes de hacer el cambio, bloquea el viaje con `FOR UPDATE` y comprueba que:
 
-* El viaje existe.
-* El viaje está en estado `aceptado`.
-* Tiene conductor asignado.
-* Tiene vehículo asignado.
+- El viaje existe.
+- El viaje está en estado `aceptado`.
+- Tiene conductor asignado.
+- Tiene vehículo asignado.
 
 Si las validaciones son correctas, actualiza la tabla `viaje`:
 
@@ -975,7 +975,7 @@ Si todo es correcto, se ejecutan estos pasos:
 El cálculo económico aplicado es:
 
 ```sql
-v_importe_total = ROUND(v_importe_ofrecido * 1.20, 2);
+v_importe_total = ROUND(v_importe_ofrecido - 1.20, 2);
 v_comision = ROUND(v_importe_total - v_importe_ofrecido, 2);
 ```
 
@@ -1011,11 +1011,11 @@ IF NOT (OLD.estado <=> NEW.estado) THEN
 
 Cuando detecta un cambio, guarda:
 
-* el identificador del viaje;
-* el estado anterior;
-* el estado nuevo;
-* la fecha del cambio;
-* un comentario.
+- el identificador del viaje
+- el estado anterior
+- el estado nuevo
+- la fecha del cambio
+- un comentario
 
 Este trigger permite reconstruir el historial completo de estados de cada viaje.
 
@@ -1025,11 +1025,11 @@ Este trigger se ejecuta cuando se inserta un nuevo viaje.
 
 Añade un registro en `audit_operacion` indicando:
 
-* la tabla afectada;
-* el identificador del viaje creado;
-* la acción `INSERT`;
-* el usuario MySQL que realizó la operación;
-* una descripción del evento.
+- la tabla afectada
+- el identificador del viaje creado
+- la acción `INSERT`
+- el usuario MySQL que realizó la operación
+- una descripción del evento.
 
 Sirve para auditar la creación de nuevas solicitudes de viaje.
 
@@ -1047,9 +1047,9 @@ Este trigger se ejecuta cuando se actualiza una oferta.
 
 Registra en `audit_operacion` el cambio realizado sobre la oferta, especialmente los cambios de estado, por ejemplo:
 
-* `pendiente` a `aceptada`;
-* `pendiente` a `expirada`;
-* `pendiente` a `rechazada`.
+- `pendiente` a `aceptada`
+- `pendiente` a `expirada`
+- `pendiente` a `rechazada`
 
 Es útil para revisar cómo se resolvieron las ofertas generadas para un viaje.
 
@@ -1071,24 +1071,26 @@ Los triggers permiten registrar automáticamente eventos importantes sin depende
 
 En conjunto, esta solución permite:
 
-* centralizar la lógica crítica en la base de datos;
-* evitar actualizaciones manuales inconsistentes;
-* controlar el ciclo de vida del viaje;
-* prevenir dobles aceptaciones de ofertas;
-* asegurar que los pagos se generan una sola vez;
-* mantener auditoría automática de operaciones relevantes.
+- centralizar la lógica crítica en la base de datos
+- evitar actualizaciones manuales inconsistentes
+- controlar el ciclo de vida del viaje
+- prevenir dobles aceptaciones de ofertas
+- asegurar que los pagos se generan una sola vez
+- mantener auditoría automática de operaciones relevantes
 
 ## 6. Dashboard
 
-El archivo `dashboard.sql` contiene un conjunto de consultas pensadas para revisar el estado del sistema y obtener métricas relevantes directamente desde MySQL.
+El archivo `dashboard.sql` contiene un conjunto de consultas para revisar el estado funcional y técnico de la base de datos `ride_hailing`.
 
-El dashboard se ha planteado como un panel SQL ejecutable sobre la base de datos. Para ello se usan consultas `SELECT`, `SHOW STATUS`, `SHOW VARIABLES`, `information_schema`, `performance_schema` y `EXPLAIN`.
+No se trata de un dashboard gráfico, sino de un panel SQL ejecutable directamente sobre MySQL. Para ello se combinan consultas de negocio, consultas de auditoría y consultas internas del servidor mediante `SELECT`, `SHOW STATUS`, `SHOW VARIABLES`, `information_schema`, `performance_schema` y `EXPLAIN`.
+
+El objetivo es poder comprobar, desde SQL, tanto el comportamiento de la plataforma como el estado operativo del servidor MySQL.
 
 ### 6.1 Resumen general del sistema
 
-La primera parte del dashboard muestra un resumen global de las entidades principales de la base de datos.
+La primera parte del dashboard muestra un resumen global de los datos cargados en las tablas principales.
 
-Se cuentan registros de las tablas principales:
+Se cuentan registros de:
 
 - `usuario`
 - `rider`
@@ -1100,88 +1102,87 @@ Se cuentan registros de las tablas principales:
 - `pago`
 - `audit_operacion`
 
-Esta consulta sirve para comprobar rápidamente el volumen de datos cargado y verificar que la base de datos contiene información en las tablas principales.
+Esta consulta permite comprobar rápidamente si la base de datos contiene datos en las entidades principales del modelo.
 
-También se incluyen resúmenes de:
+También se incluyen dos resúmenes por estado:
 
-- viajes por estado;
-- ofertas por estado.
+- viajes por `estado`
+- ofertas por `estado_oferta`
 
-Esto permite ver, por ejemplo, cuántos viajes están `solicitado`, `aceptado`, `en_curso`, `finalizado` o `cancelado`, y cuántas ofertas están `pendiente`, `aceptada`, `rechazada` o `expirada`.
+Esto permite ver cuántos viajes están `solicitado`, `aceptado`, `en_curso`, `finalizado` o `cancelado`, y cuántas ofertas están `pendiente`, `aceptada`, `rechazada` o `expirada`.
 
 ### 6.2 Métricas de negocio
 
-El segundo bloque contiene consultas orientadas a analizar el funcionamiento de la plataforma.
+El segundo bloque del dashboard contiene consultas orientadas a analizar el funcionamiento de la plataforma.
 
 | Métrica | Finalidad |
 | --- | --- |
 | Viajes solicitados por hora | Ver en qué horas del día se solicitan más viajes. |
 | Ofertas aceptadas por hora | Analizar en qué franjas horarias se aceptan más ofertas. |
 | Tasa de aceptación por conductor | Medir qué porcentaje de ofertas acepta cada conductor. |
-| Tasa de aceptación por company | Comparar la aceptación de ofertas entre compañías. |
+| Tasa de aceptación por company | Comparar la aceptación de ofertas entre companies. |
 | Kilometraje medio | Calcular la distancia media de los viajes finalizados. |
 | Duración media | Calcular la duración media de los viajes finalizados. |
-| Ingresos por conductor | Calcular ingresos, euros/km y euros/minuto por conductor. |
-| Ingresos por company | Calcular ingresos de la compañía según la comisión registrada. |
+| Ingresos por conductor | Calcular ingresos del conductor, euros/km y euros/minuto. |
+| Ingresos por company | Calcular ingresos de la company a partir de la comisión registrada. |
 | Valoración media por conductor | Obtener la puntuación media recibida por cada conductor. |
 
-La tasa de aceptación se calcula como:
+La tasa de aceptación se calcula como `ofertas aceptadas / total de ofertas recibidas * 100`.
 
-```text
-ofertas aceptadas / total de ofertas recibidas * 100
-```
+Esta métrica se calcula en dos niveles:
 
-Esta métrica se calcula tanto por conductor como por company. Así se puede analizar el comportamiento individual de cada conductor y también el rendimiento agregado de cada empresa.
+- por conductor
+- por company
 
-Para las métricas económicas solo se consideran viajes finalizados y pagos completados. Esto evita mezclar datos de viajes aún abiertos, cancelados o sin pago.
+De esta forma se puede analizar tanto el comportamiento individual de cada conductor como el rendimiento agregado de cada company.
+
+Para las métricas económicas solo se consideran viajes `finalizado` y pagos `completado`. Además, se exige que existan `fecha_inicio` y `fecha_fin`, porque son necesarias para calcular la duración del viaje y los ingresos por minuto.
 
 ### 6.3 Métricas internas de MySQL
 
 El tercer bloque contiene consultas para revisar el estado técnico del servidor MySQL.
 
-Se incluyen métricas como:
+Se utilizan variables de estado y de configuración mediante `SHOW STATUS` y `SHOW VARIABLES`.
 
 | Métrica | Consulta usada | Utilidad |
 | --- | --- | --- |
 | Tiempo activo del servidor | `SHOW STATUS LIKE 'Uptime';` | Indica cuánto tiempo lleva MySQL funcionando desde el último arranque. |
 | Conexiones activas | `SHOW STATUS LIKE 'Threads_connected';` | Muestra cuántas conexiones están abiertas en ese momento. |
 | Máximo de conexiones alcanzado | `SHOW STATUS LIKE 'Max_used_connections';` | Permite comparar el pico real de conexiones con el límite configurado. |
-| Límite de conexiones | `SHOW VARIABLES LIKE 'max_connections';` | Indica cuántas conexiones simultáneas permite MySQL como máximo. |
-| Conexiones rechazadas | `SHOW STATUS LIKE 'Connection_errors_max_connections';` | Permite detectar si alguna conexión ha sido rechazada por superar el límite. |
+| Límite de conexiones | `SHOW VARIABLES LIKE 'max_connections';` | Indica cuántas conexiones simultáneas permite el servidor. |
+| Conexiones rechazadas | `SHOW STATUS LIKE 'Connection_errors_max_connections';` | Detecta conexiones rechazadas por superar el límite permitido. |
 | Total de queries ejecutadas | `SHOW STATUS LIKE 'Queries';` | Mide la actividad acumulada del servidor. |
 | Consultas recibidas desde clientes | `SHOW STATUS LIKE 'Questions';` | Cuenta las consultas enviadas por clientes al servidor. |
 | Lecturas | `SHOW STATUS LIKE 'Com_select';` | Muestra cuántas operaciones `SELECT` se han ejecutado. |
 | Inserciones | `SHOW STATUS LIKE 'Com_insert';` | Muestra cuántas operaciones `INSERT` se han ejecutado. |
 | Actualizaciones | `SHOW STATUS LIKE 'Com_update';` | Muestra cuántas operaciones `UPDATE` se han ejecutado. |
 | Borrados | `SHOW STATUS LIKE 'Com_delete';` | Muestra cuántas operaciones `DELETE` se han ejecutado. |
-| Queries lentas | `SHOW STATUS LIKE 'Slow_queries';` | Ayuda a detectar consultas que han superado el umbral de lentitud. |
-| Slow query log | `SHOW VARIABLES LIKE 'slow_query_log%';` | Comprueba si el registro de consultas lentas está activado y dónde se guarda. |
+| Queries lentas | `SHOW STATUS LIKE 'Slow_queries';` | Indica cuántas consultas han superado el umbral de lentitud. |
+| Slow query log | `SHOW VARIABLES LIKE 'slow_query_log%';` | Comprueba la configuración del registro de consultas lentas. |
 | Umbral de query lenta | `SHOW VARIABLES LIKE 'long_query_time';` | Indica a partir de cuántos segundos una consulta se considera lenta. |
 
-Estas métricas permiten comprobar si el servidor está respondiendo correctamente y si existe algún síntoma básico de saturación o degradación.
+Estas métricas permiten detectar síntomas básicos de saturación, exceso de conexiones, actividad elevada o consultas lentas.
 
 ### 6.4 Métricas de InnoDB
 
-El dashboard también revisa métricas internas de InnoDB, especialmente relacionadas con el buffer pool.
+El dashboard también revisa métricas específicas de InnoDB, especialmente relacionadas con el buffer pool.
 
-El buffer pool es la memoria que InnoDB utiliza para cachear datos e índices. Si funciona bien, muchas lecturas se resuelven desde memoria y no desde disco.
+El buffer pool es la memoria que InnoDB utiliza para almacenar en caché datos e índices. Si el buffer pool funciona correctamente, muchas lecturas se resuelven desde memoria y no desde disco.
 
 Se consultan:
 
-* tamaño del buffer pool;
-* páginas totales;
-* páginas libres;
-* páginas sucias;
-* lecturas lógicas;
-* lecturas físicas.
+- tamaño del buffer pool
+- páginas totales
+- páginas libres
+- páginas sucias
+- lecturas lógicas
+- lecturas físicas
 
-Además, se calcula el hit ratio del buffer pool:
+Además, se calcula el hit ratio del buffer pool como `(read_requests - reads) / read_requests * 100`.
 
-```text
-(read_requests - reads) / read_requests * 100
-```
+Esta métrica indica qué porcentaje de lecturas se resuelve desde memoria. Un valor alto es positivo, porque significa que MySQL está evitando muchas lecturas físicas de disco.
 
-Esta métrica indica qué porcentaje de lecturas se atienden desde memoria. Un porcentaje alto es positivo, porque significa que MySQL está evitando muchas lecturas físicas de disco.
+La consulta controla también el caso en el que no existan lecturas registradas, evitando una división por cero en entornos recién arrancados.
 
 ### 6.5 Bloqueos, deadlocks y transacciones activas
 
@@ -1189,12 +1190,12 @@ El dashboard incluye consultas para detectar posibles problemas de concurrencia.
 
 Se revisan:
 
-* esperas por locks de fila;
-* tiempo medio de espera por locks;
-* deadlocks detectados;
-* transacciones activas.
+- esperas por locks de fila
+- tiempo medio de espera por locks
+- deadlocks detectados
+- transacciones activas.
 
-Para ver transacciones abiertas se usa:
+Para consultar transacciones activas se usa `information_schema.INNODB_TRX`:
 
 ```sql
 SELECT
@@ -1206,7 +1207,9 @@ FROM information_schema.INNODB_TRX
 ORDER BY trx_started ASC;
 ```
 
-Esta consulta ayuda a detectar transacciones largas o bloqueadas. Es especialmente útil porque el proyecto usa procedimientos almacenados con transacciones y bloqueos `FOR UPDATE` en operaciones críticas.
+Esta consulta ayuda a detectar transacciones largas, abiertas o bloqueadas.
+
+Es especialmente relevante en este proyecto, porque los procedimientos almacenados utilizan transacciones y bloqueos `FOR UPDATE` en operaciones críticas, como la aceptación de ofertas o el cambio de estado de un viaje.
 
 ### 6.6 Tamaño de tablas e índices
 
@@ -1214,27 +1217,25 @@ También se consulta `information_schema.tables` para obtener el tamaño ocupado
 
 La consulta muestra:
 
-* nombre de la tabla;
-* tamaño de datos en MB;
-* tamaño de índices en MB.
+- nombre de la tabla
+- tamaño de datos en MB
+- tamaño de índices en MB
 
-Esto permite identificar qué tablas ocupan más espacio y observar el crecimiento de la base de datos.
+Esto permite identificar qué tablas ocupan más espacio y observar el crecimiento de datos e índices dentro del esquema.
 
 ### 6.7 Comprobación de índices con `EXPLAIN`
 
-El archivo incluye varias consultas con `EXPLAIN`.
-
-Estas consultas sirven para comprobar cómo MySQL ejecuta algunas consultas importantes del dashboard y si puede apoyarse en los índices definidos en `schema.sql`.
+El archivo incluye varias consultas con `EXPLAIN` para comprobar cómo MySQL ejecuta consultas importantes del dashboard.
 
 Se analizan tres casos:
 
-| Consulta comprobada | Índices relacionados |
+| Consulta comprobada | Finalidad |
 | --- | --- |
-| Ofertas pendientes ordenadas por fecha | `idx_oferta_estado`, `idx_oferta_fecha_envio`                     |
-| Viajes por estado y fecha              | `idx_viaje_estado_fecha`                                          |
-| Ingresos por company                   | Índices de claves primarias, claves foráneas y filtros por estado |
+| Ofertas pendientes ordenadas por fecha | Comprobar el acceso a ofertas filtradas por estado y ordenadas por fecha de envío. | 
+| Viajes por estado y fecha | Revisar si la consulta puede apoyarse en el índice de estado y fecha de solicitud. |
+| Ingresos por company | Analizar una consulta con varios `JOIN`, filtros por estado y agrupación por company. |
 
-El objetivo de estas comprobaciones es justificar que el diseño de índices ayuda a mejorar las consultas frecuentes y evita, cuando sea posible, recorridos completos innecesarios de las tablas.
+El objetivo de estas comprobaciones es verificar si el diseño de índices definido en `schema.sql` ayuda a reducir recorridos completos innecesarios y mejora las consultas frecuentes.
 
 ### 6.8 Métricas de auditoría
 
@@ -1245,10 +1246,12 @@ Se incluyen consultas sobre:
 | Consulta | Finalidad |
 | --- | --- |
 | Operaciones auditadas por tabla | Ver cuántas operaciones se han registrado por tabla y tipo de acción. |
-| Últimas operaciones auditadas   | Mostrar los últimos registros generados por los triggers.             |
-| Cambios de estado de viaje      | Resumir las transiciones almacenadas en `viaje_estado_log`.           |
+| Últimas operaciones auditadas | Mostrar los últimos registros generados en `audit_operacion`. |
+| Cambios de estado de viaje | Resumir las transiciones almacenadas en `viaje_estado_log. |
 
-Estas consultas permiten comprobar que los triggers están registrando correctamente operaciones sobre viajes, ofertas y pagos.
+Estas consultas permiten comprobar que los triggers están registrando correctamente las operaciones relevantes sobre viajes, ofertas y pagos.
+
+También permiten revisar la evolución funcional de los viajes, por ejemplo transiciones entre `solicitado`, `aceptado`, `en_curso`, `finalizado` o `cancelado`.
 
 ## 7. Backup
 
@@ -1440,10 +1443,10 @@ SELECT 'audit_operacion', COUNT(*) FROM audit_operacion;
 
 Además, se comprueban:
 
-* claves foráneas declaradas;
-* procedimientos almacenados;
-* triggers;
-* vistas.
+- claves foráneas declaradas;
+- procedimientos almacenados;
+- triggers;
+- vistas.
 
 Esto permite validar que no solo se han restaurado los datos, sino también los objetos de la base de datos.
 
