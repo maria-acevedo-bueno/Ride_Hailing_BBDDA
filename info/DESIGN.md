@@ -1277,32 +1277,68 @@ También permiten revisar la evolución funcional de los viajes, por ejemplo tra
 
 ## 7. Backup
 
-El archivo `backup.sql` muestra el plan de copias de seguridad y recuperación de la base de datos.
+El archivo `backup.sql` documenta el plan de copias de seguridad y recuperación de la base de datos `ride_hailing`.
 
 El objetivo es poder recuperar la base de datos ante una pérdida de datos, un borrado accidental o un fallo del entorno. Para ello se usa como método principal el backup lógico con `mysqldump`, ejecutado desde Docker.
 
 ### 7.1 Objetivo del plan
 
+El plan diferencia los siguientes conceptos:
+
+| Concepto | Significado |
+| --- | --- |
+| Backup | Copia de seguridad de los datos y objetos de la base de datos. |
+| Restore | Proceso de restaurar una copia de seguridad. |
+| RPO | Pérdida máxima de datos aceptable. |
+| RTO | Tiempo máximo aceptable para recuperar el servicio. |
+| PITR | Recuperación a un punto concreto en el tiempo usando backup + binlog. |
+
+Para esta práctica se ha decidido:
+
 | Elemento | Decisión |
 | --- | --- |
 | Método principal | Backup lógico con `mysqldump`. |
-| RPO (Pérdida máxima de datos aceptable.) | 24 horas, usando backup diario. |
-| RTO (Tiempo máximo aceptable para recuperar el servicio.) | Restauración manual en entorno Docker. |
-| PITR | si el binlog está activo y se conservan los binlogs necesarios. |
+| RPO | 24 horas, usando backup diario. |
+| RTO | Restauración manual en entorno Docker. |
+| Mejora adicional | PITR si el binlog está activo y se conservan los binlogs necesarios. |
 
-### 7.2 Backup lógico completo
+El backup lógico se considera suficiente porque el proyecto tiene un tamaño manejable, es fácil de restaurar en Docker y genera un archivo SQL portable.
 
-El backup principal es una copia lógica del esquema de la base de datos haciendo uso de `mysqldump`.
+### 7.2 Usuario de backup
+
+Los comandos de backup usan el usuario `backup_user`, creado en `permissions.sql`.
+
+Este usuario está separado del usuario de administración, del usuario de aplicación y de los usuarios de consulta. Con esto se mantiene el principio de mínimos privilegios: cada cuenta se usa para una función concreta.
+
+El rol asociado es `rol_backup`, que tiene permisos para leer datos y objetos necesarios para copias lógicas:
+
+```sql
+SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES
+```
+
+Además, tiene permisos globales útiles para backup y recuperación:
+
+```sql
+RELOAD, PROCESS, REPLICATION CLIENT
+```
+
+### 7.3 Backup lógico
+
+El backup principal es una copia lógica del esquema de la base de datos.
+
+El comando se ejecuta desde la terminal, no dentro del cliente MySQL:
 
 ```bash
 docker exec mysql8 mysqldump \
-  -ubackup_user -pBackup1234 \
+  -ubackup_user -pBackup_Pass_2026! \
   --databases ride_hailing \
   --single-transaction \
   --routines --triggers --events \
   --set-gtid-purged=OFF \
   > backup_ride_hailing_$(date +%Y%m%d).sql
 ```
+
+Las opciones principales son:
 
 | Opción | Finalidad |
 | --- | --- |
@@ -1313,9 +1349,29 @@ docker exec mysql8 mysqldump \
 | `--events`                 | Incluye eventos si existieran.                                                              |
 | `--set-gtid-purged=OFF`    | Evita incluir información GTID, ya que no se usa replicación GTID en la práctica.           |
 
-### 7.3 Backup de tablas concretas
+Esta copia es la principal para restaurar la base de datos del proyecto.
 
-Este backup puede ser útil si solo se quieren exportar tablas específicas.
+### 7.4 Backup completo del servidor
+
+También se documenta un backup completo del servidor:
+
+```bash
+docker exec mysql8 mysqldump \
+  -ubackup_user -pBackup_Pass_2026! \
+  --all-databases \
+  --single-transaction \
+  --routines --triggers --events \
+  --set-gtid-purged=OFF \
+  > backup_full_$(date +%Y%m%d).sql
+```
+
+Este tipo de backup incluye todas las bases de datos del servidor. En un entorno real sería útil para incluir también la base `mysql`, donde se guardan usuarios y privilegios.
+
+En esta práctica, el backup principal es el de `ride_hailing`. Si `backup_user` no tuviera permisos suficientes para exportar todo el servidor, el backup completo debería ejecutarse con una cuenta administrativa.
+
+### 7.5 Backup de tablas concretas
+
+También se documenta una copia parcial de tablas concretas:
 
 ```bash
 docker exec mysql8 mysqldump \
@@ -1337,7 +1393,9 @@ docker exec mysql8 mysqldump \
   > backup_tablas_ride_hailing_$(date +%Y%m%d).sql
 ```
 
-### 7.4 Restauración de un backup
+Este backup puede ser útil si solo se quieren exportar las tablas principales del modelo funcional y de auditoría.
+
+### 7.6 Restauración de un backup
 
 Para restaurar un backup se usa el cliente `mysql` dentro del contenedor.
 
@@ -1355,7 +1413,7 @@ docker exec -i mysql8 mysql -uroot -prootpass < backup_ride_hailing.sql
 
 Para restaurar se usa `root`, porque el dump puede contener sentencias como `CREATE DATABASE`, `USE`, `CREATE TABLE`, procedimientos y triggers. El usuario `admin_user` tiene permisos sobre `ride_hailing.*`, pero no necesariamente privilegios globales para reconstruir todo desde cero.
 
-### 7.5 Comprobaciones después del restore
+### 7.7 Comprobaciones después del restore
 
 Después de restaurar la copia, el archivo incluye varias comprobaciones.
 
@@ -1414,7 +1472,7 @@ Además, se comprueban:
 
 Esto permite validar que no solo se han restaurado los datos, sino también los objetos de la base de datos.
 
-### 7.6 PITR
+### 7.8 PITR
 
 También se documenta la posibilidad de hacer PITR, es decir, recuperación a un punto concreto en el tiempo.
 
@@ -1445,7 +1503,7 @@ SHOW VARIABLES LIKE 'binlog_expire_logs_seconds';
 SHOW BINARY LOGS;
 ```
 
-### 7.7 Ejemplo de recuperación PITR
+### 7.9 Ejemplo de recuperación PITR
 
 El caso planteado es recuperar la base de datos hasta antes de un borrado accidental.
 
@@ -1488,7 +1546,7 @@ docker exec mysql8 mysqlbinlog \
   /var/lib/mysql/mysql-bin.000001 > cambios.sql
 ```
 
-### 7.8 Automatización de backups
+### 7.10 Automatización de backups
 
 El archivo documenta un script de backup con rotación, pensado para guardarse como `backup_mysql.sh`.
 
@@ -1544,7 +1602,7 @@ Y se programa a las 3:00:
 
 Con esto se cumple el RPO definido de 24 horas, ya que se genera una copia diaria.
 
-### 7.9 Snapshots consistentes
+### 7.11 Snapshots consistentes
 
 Aunque el método principal del proyecto es `mysqldump`, también se documenta el patrón para realizar snapshots consistentes.
 
